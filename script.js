@@ -1,0 +1,1781 @@
+function clearSW() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        for (const reg of regs) reg.unregister(); // ⛔ Remove o service worker
+        caches.keys().then(keys => keys.forEach(k => caches.delete(k))); // 🧹 Limpa TODOS os caches armazenados
+        alert("Atualizado! Recarregue a página."); // 💬 Mensagem pro usuário
+        location.reload(true); // 🔄 Recarrega a página (forçado)
+      });
+    }
+  }
+
+// Classe principal do aplicativo
+class DailyTodoApp {
+    constructor() {
+        this.recurringTasks = [];
+        this.dailyTasks = {};
+        this.history = {};
+        this.currentChartPeriod = '7days'; // Default period
+        this.currentTab = 'today'; // Default tab
+        this.resizeTimeout = null; // For debouncing resize events
+        this.currentTheme = 'light'; // Default theme
+        // Garantir que estamos usando a data local correta
+        const localDate = this.getLocalDate();
+        this.currentDate = localDate.getFullYear() + '-' +
+            String(localDate.getMonth() + 1).padStart(2, '0') + '-' +
+            String(localDate.getDate()).padStart(2, '0');
+        
+        this.init();
+    }
+
+    // Inicialização do aplicativo
+    init() {
+        this.loadData();
+        this.loadTheme();
+        this.setupEventListeners();
+        this.setupPWA();
+        this.updateCurrentDate(); // Garantir que a data atual esteja correta
+        this.generateTodayTasks();
+        this.syncTodayTasks();
+        this.cleanOldData();
+        this.updateUI();
+        this.updateDateDisplay();
+        this.updateTodayStats();
+    }
+
+    // Configuração dos event listeners
+    setupEventListeners() {
+        // Tab navigation
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tab = e.currentTarget.dataset.tab;
+                this.switchTab(tab);
+            });
+        });
+
+        // Add task button
+        document.getElementById('add-recurring-btn').addEventListener('click', () => {
+            this.showAddTaskModal();
+        });
+
+        // Add today task button
+        const addTodayBtn = document.getElementById('add-today-btn');
+        if (addTodayBtn) {
+            addTodayBtn.addEventListener('click', () => {
+                this.showAddTaskModal();
+            });
+        }
+
+        // Sync tasks button
+        const syncBtn = document.getElementById('sync-tasks-btn');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', () => {
+                this.syncTodayTasks();
+                this.renderTodayTasks();
+                this.updateTodayStats();
+                
+                // Update insights if on analytics tab
+                if (this.currentTab === 'analytics') {
+                    this.renderInsights();
+                }
+                
+                this.showNotification('Tarefas sincronizadas com sucesso!', 'success');
+            });
+        }
+
+        // Theme toggle button
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                this.toggleTheme();
+            });
+        }
+
+        // Filter buttons for recurring tasks
+        document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const filter = e.currentTarget.dataset.filter;
+                this.filterRecurringTasks(filter);
+            });
+        });
+
+        // Period selector for analytics
+        document.querySelectorAll('.period-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const period = e.currentTarget.dataset.period;
+                this.changeChartPeriod(period);
+                
+                // Update active button
+                document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+                e.currentTarget.classList.add('active');
+            });
+        });
+
+        // History filters
+        document.querySelectorAll('.filter-btn[data-history-filter]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const filter = e.currentTarget.dataset.historyFilter;
+                this.filterHistory(filter);
+            });
+        });
+
+        // Task checkbox clicks
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.task-checkbox')) {
+                const taskId = e.target.closest('.task-checkbox').dataset.taskId;
+                if (taskId) {
+                    this.toggleTaskCompletion(taskId);
+                    this.renderTodayTasks();
+                    this.updateTodayStats();
+                }
+            }
+        });
+
+        // Window resize listener for responsive chart
+        window.addEventListener('resize', () => {
+            if (this.currentTab === 'analytics') {
+                // Debounce the resize event
+                clearTimeout(this.resizeTimeout);
+                this.resizeTimeout = setTimeout(() => {
+                    this.renderChart();
+                }, 250);
+            }
+        });
+
+        // Modal events
+        document.getElementById('close-modal').addEventListener('click', () => {
+            this.hideAddTaskModal();
+        });
+
+        document.getElementById('cancel-add').addEventListener('click', () => {
+            this.hideAddTaskModal();
+        });
+
+        document.getElementById('close-details-modal').addEventListener('click', () => {
+            this.hideTaskDetailsModal();
+        });
+
+        document.getElementById('close-details').addEventListener('click', () => {
+            this.hideTaskDetailsModal();
+        });
+
+        // Form submission
+        document.getElementById('add-task-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.addRecurringTask();
+        });
+
+        // Delete task
+        document.getElementById('delete-task-btn').addEventListener('click', () => {
+            this.deleteCurrentTask();
+        });
+
+        // Edit task button
+        document.getElementById('edit-task-btn').addEventListener('click', () => {
+            this.showEditTaskModal();
+        });
+
+        // Edit task modal
+        document.getElementById('close-edit-modal').addEventListener('click', () => {
+            this.hideEditTaskModal();
+        });
+
+        document.getElementById('cancel-edit').addEventListener('click', () => {
+            this.hideEditTaskModal();
+        });
+
+        document.getElementById('edit-task-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveTaskEdit();
+        });
+
+        // Close modals on outside click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                    document.body.classList.remove('modal-open');
+                }
+            });
+        });
+    }
+
+    // Switch between tabs
+    switchTab(tabName) {
+        // Update current date to ensure it's always correct
+        this.updateCurrentDate();
+        
+        // Update tab buttons
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+        // Update tab content
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(`${tabName}-tab`).classList.add('active');
+
+        this.currentTab = tabName;
+
+        // Load specific content for each tab
+        switch (tabName) {
+            case 'today':
+                this.renderTodayTasks();
+                this.updateTodayStats();
+                break;
+            case 'recurring':
+                this.renderRecurringTasks();
+                break;
+            case 'analytics':
+                this.renderAnalytics();
+                break;
+            case 'history':
+                this.renderHistory();
+                break;
+        }
+    }
+
+    // Update today's statistics
+    updateTodayStats() {
+        const tasks = this.dailyTasks[this.currentDate] || [];
+        const totalTasks = tasks.length;
+        const completedTasks = tasks.filter(task => task.completed).length;
+        const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+        // Update hero stats
+        document.getElementById('today-total').textContent = totalTasks;
+        document.getElementById('today-completed').textContent = completedTasks;
+        document.getElementById('today-percentage').textContent = `${percentage}%`;
+
+        // Update progress ring
+        const progressCircle = document.getElementById('progress-circle');
+        const progressText = document.getElementById('progress-text');
+        if (progressCircle && progressText) {
+            const circumference = 2 * Math.PI * 54; // r = 54
+            const offset = circumference - (percentage / 100) * circumference;
+            progressCircle.style.strokeDashoffset = offset;
+            progressText.textContent = `${percentage}%`;
+        }
+    }
+
+    // Filter recurring tasks
+    filterRecurringTasks(filter) {
+        // Update filter buttons
+        document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
+
+        // Filter and render tasks
+        this.renderRecurringTasks(filter);
+    }
+
+    // Filter history
+    filterHistory(filter) {
+        // Update filter buttons
+        document.querySelectorAll('.filter-btn[data-history-filter]').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-history-filter="${filter}"]`).classList.add('active');
+
+        // Filter and render history
+        this.renderHistory(filter);
+    }
+
+    // Render analytics tab
+    renderAnalytics() {
+        // Garantir que a data atual esteja correta antes de renderizar analytics
+        this.updateCurrentDate();
+        this.renderStats();
+        this.renderChart();
+        this.renderInsights();
+    }
+
+    // Render insights
+    renderInsights() {
+        const insights = this.generateInsights();
+        const insightsContainer = document.querySelector('.insights-grid');
+        
+        if (insightsContainer) {
+            insightsContainer.innerHTML = insights.map(insight => `
+                <div class="insight-card">
+                    <i class="fas ${insight.icon}"></i>
+                    <h4>${insight.title}</h4>
+                    <p>${insight.description}</p>
+                </div>
+            `).join('');
+        }
+    }
+
+    // Gerar insights baseados nos dados do usuário
+    generateInsights() {
+        const insights = [];
+        
+        // Insight 1: Melhor dia da semana
+        const bestDayInsight = this.getBestDayInsight();
+        insights.push(bestDayInsight);
+        
+        // Insight 2: Meta sugerida
+        const goalInsight = this.getGoalInsight();
+        insights.push(goalInsight);
+        
+        // Insight 3: Tendência de produtividade
+        const trendInsight = this.getTrendInsight();
+        if (trendInsight) {
+            insights.push(trendInsight);
+        }
+        
+        // Insight 4: Dica personalizada
+        const tipInsight = this.getTipInsight();
+        insights.push(tipInsight);
+        
+        return insights;
+    }
+
+    // Insight sobre o melhor dia da semana
+    getBestDayInsight() {
+        const weekdayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+        const weekdayStats = [0, 0, 0, 0, 0, 0, 0];
+        const weekdayCounts = [0, 0, 0, 0, 0, 0, 0];
+
+        Object.keys(this.history).forEach(date => {
+            const dayData = this.history[date];
+            if (dayData && dayData.total > 0) {
+                // Usar a data local para calcular o dia da semana
+                const dateParts = date.split('-');
+                const localDate = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+                const dayOfWeek = localDate.getDay();
+                weekdayStats[dayOfWeek] += dayData.percentage;
+                weekdayCounts[dayOfWeek]++;
+            }
+        });
+
+        let bestDay = 0;
+        let bestAvg = 0;
+
+        weekdayStats.forEach((total, index) => {
+            if (weekdayCounts[index] > 0) {
+                const avg = total / weekdayCounts[index];
+                if (avg > bestAvg) {
+                    bestAvg = avg;
+                    bestDay = index;
+                }
+            }
+        });
+
+        const bestDayName = weekdayNames[bestDay];
+        const avgPercentage = Math.round(bestAvg);
+
+        return {
+            icon: 'fa-star',
+            title: 'Melhor Dia da Semana',
+            description: `Você é mais produtivo nas ${bestDayName.toLowerCase()}s, com ${avgPercentage}% de conclusão em média. Tente agendar suas tarefas mais importantes neste dia.`
+        };
+    }
+
+    // Insight sobre meta sugerida
+    getGoalInsight() {
+        const recentTasks = this.getRecentTaskCounts();
+        const avgTasks = recentTasks.length > 0 ? 
+            Math.round(recentTasks.reduce((sum, count) => sum + count, 0) / recentTasks.length) : 0;
+        
+        let suggestedGoal = avgTasks;
+        let description = '';
+
+        if (avgTasks === 0) {
+            suggestedGoal = 5;
+            description = 'Comece com uma meta de 5 tarefas por dia para estabelecer uma rotina produtiva.';
+        } else if (avgTasks < 5) {
+            suggestedGoal = Math.min(avgTasks + 2, 8);
+            description = `Baseado no seu histórico, você pode aumentar sua meta diária para ${suggestedGoal} tarefas.`;
+        } else if (avgTasks >= 8) {
+            suggestedGoal = avgTasks + 1;
+            description = `Excelente! Você pode tentar aumentar para ${suggestedGoal} tarefas por dia.`;
+        } else {
+            suggestedGoal = Math.min(avgTasks + 1, 10);
+            description = `Você está indo bem! Considere aumentar sua meta para ${suggestedGoal} tarefas diárias.`;
+        }
+
+        return {
+            icon: 'fa-target',
+            title: 'Meta Sugerida',
+            description: description
+        };
+    }
+
+    // Insight sobre tendência de produtividade
+    getTrendInsight() {
+        const last7Days = this.getLast7Days();
+        const recentData = last7Days.map(date => this.history[date]).filter(data => data && data.total > 0);
+        
+        if (recentData.length < 3) {
+            return null; // Não há dados suficientes
+        }
+
+        const recentAvg = recentData.reduce((sum, data) => sum + data.percentage, 0) / recentData.length;
+        const olderData = Object.keys(this.history)
+            .filter(date => !last7Days.includes(date))
+            .map(date => this.history[date])
+            .filter(data => data && data.total > 0)
+            .slice(-7);
+
+        if (olderData.length === 0) {
+            return null;
+        }
+
+        const olderAvg = olderData.reduce((sum, data) => sum + data.percentage, 0) / olderData.length;
+        const improvement = recentAvg - olderAvg;
+
+        if (Math.abs(improvement) < 5) {
+            return {
+                icon: 'fa-chart-line',
+                title: 'Produtividade Estável',
+                description: 'Sua produtividade está consistente. Continue mantendo essa rotina!'
+            };
+        } else if (improvement > 0) {
+            return {
+                icon: 'fa-arrow-up',
+                title: 'Melhoria na Produtividade',
+                description: `Excelente! Sua produtividade melhorou ${Math.round(improvement)}% nos últimos 7 dias.`
+            };
+        } else {
+            return {
+                icon: 'fa-arrow-down',
+                title: 'Atenção à Produtividade',
+                description: `Sua produtividade diminuiu ${Math.round(Math.abs(improvement))}% recentemente. Tente revisar sua rotina.`
+            };
+        }
+    }
+
+    // Insight com dica personalizada
+    getTipInsight() {
+        const tasks = this.recurringTasks;
+        const completedToday = this.getTodayCompletedCount();
+        const totalToday = this.getTodayTotalCount();
+        
+        if (tasks.length === 0) {
+            return {
+                icon: 'fa-lightbulb',
+                title: 'Dica do Dia',
+                description: 'Adicione sua primeira tarefa recorrente para começar a organizar sua rotina diária!'
+            };
+        }
+
+        if (totalToday === 0) {
+            return {
+                icon: 'fa-lightbulb',
+                title: 'Dica do Dia',
+                description: 'Sincronize suas tarefas para gerar as atividades de hoje e começar a ser produtivo!'
+            };
+        }
+
+        if (completedToday === 0 && totalToday > 0) {
+            return {
+                icon: 'fa-lightbulb',
+                title: 'Dica do Dia',
+                description: 'Comece o dia marcando uma tarefa como concluída. Isso motiva a continuar!'
+            };
+        }
+
+        const completionRate = totalToday > 0 ? (completedToday / totalToday) * 100 : 0;
+        
+        if (completionRate >= 80) {
+            return {
+                icon: 'fa-trophy',
+                title: 'Dica do Dia',
+                description: 'Parabéns! Você está sendo muito produtivo hoje. Continue assim!'
+            };
+        } else if (completionRate >= 50) {
+            return {
+                icon: 'fa-lightbulb',
+                title: 'Dica do Dia',
+                description: 'Você está no caminho certo! Tente completar mais uma tarefa para aumentar sua produtividade.'
+            };
+        } else {
+            return {
+                icon: 'fa-lightbulb',
+                title: 'Dica do Dia',
+                description: 'Quebre suas tarefas em partes menores para facilitar a conclusão e aumentar a motivação.'
+            };
+        }
+    }
+
+    // Obter contagem de tarefas dos últimos dias
+    getRecentTaskCounts() {
+        const last7Days = this.getLast7Days();
+        return last7Days.map(date => {
+            const dayData = this.history[date];
+            return dayData ? dayData.total : 0;
+        }).filter(count => count > 0);
+    }
+
+    // Obter contagem de tarefas concluídas hoje
+    getTodayCompletedCount() {
+        const todayTasks = this.dailyTasks[this.currentDate] || [];
+        return todayTasks.filter(task => task.completed).length;
+    }
+
+    // Obter contagem total de tarefas hoje
+    getTodayTotalCount() {
+        const todayTasks = this.dailyTasks[this.currentDate] || [];
+        return todayTasks.length;
+    }
+
+    // Carregamento de dados do localStorage
+    loadData() {
+        try {
+            this.recurringTasks = JSON.parse(localStorage.getItem('recurringTasks')) || [];
+            this.dailyTasks = JSON.parse(localStorage.getItem('dailyTasks')) || {};
+            this.history = JSON.parse(localStorage.getItem('history')) || {};
+        } catch (error) {
+            console.error('Erro ao carregar dados:', error);
+            this.recurringTasks = [];
+            this.dailyTasks = {};
+            this.history = {};
+        }
+    }
+
+    // Carregamento do tema
+    loadTheme() {
+        try {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                this.currentTheme = savedTheme;
+                this.applyTheme();
+            } else {
+                // Check system preference
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    this.currentTheme = 'dark';
+                    this.applyTheme();
+                }
+            }
+        } catch (error) {
+            console.error('Erro ao carregar tema:', error);
+        }
+    }
+
+    // Salvamento do tema
+    saveTheme() {
+        try {
+            localStorage.setItem('theme', this.currentTheme);
+        } catch (error) {
+            console.error('Erro ao salvar tema:', error);
+        }
+    }
+
+    // Aplicação do tema
+    applyTheme() {
+        document.documentElement.setAttribute('data-theme', this.currentTheme);
+        this.updateThemeIcon();
+    }
+
+    // Atualização do ícone do tema
+    updateThemeIcon() {
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            const icon = themeToggle.querySelector('i');
+            if (this.currentTheme === 'dark') {
+                icon.className = 'fas fa-moon';
+                themeToggle.title = 'Alternar para tema claro';
+            } else {
+                icon.className = 'fas fa-sun';
+                themeToggle.title = 'Alternar para tema escuro';
+            }
+        }
+    }
+
+    // Alternância do tema
+    toggleTheme() {
+        this.currentTheme = this.currentTheme === 'light' ? 'dark' : 'light';
+        this.applyTheme();
+        this.saveTheme();
+        
+        // Re-render chart if on analytics tab
+        if (this.currentTab === 'analytics') {
+            setTimeout(() => {
+                this.renderChart();
+            }, 100);
+        }
+        
+        this.showNotification(
+            this.currentTheme === 'dark' ? 'Tema escuro ativado!' : 'Tema claro ativado!', 
+            'info'
+        );
+    }
+
+    // Salvamento de dados no localStorage
+    saveData() {
+        try {
+            localStorage.setItem('recurringTasks', JSON.stringify(this.recurringTasks));
+            localStorage.setItem('dailyTasks', JSON.stringify(this.dailyTasks));
+            localStorage.setItem('history', JSON.stringify(this.history));
+        } catch (error) {
+            console.error('Erro ao salvar dados:', error);
+        }
+    }
+
+    // Geração automática de tarefas do dia
+    generateTodayTasks() {
+        if (!this.dailyTasks[this.currentDate]) {
+            this.dailyTasks[this.currentDate] = [];
+        }
+        
+        // Obter o dia da semana atual (0=domingo, 1=segunda, etc.)
+        const localDate = this.getLocalDate();
+        const currentWeekday = localDate.getDay();
+        
+        // Adicionar tarefas recorrentes que ainda não existem para hoje
+        const existingRecurringIds = this.dailyTasks[this.currentDate].map(task => task.recurringTaskId);
+        
+        this.recurringTasks.forEach(recurringTask => {
+            // Verificar se a tarefa deve aparecer no dia atual da semana
+            const shouldAppearToday = recurringTask.weekdays && recurringTask.weekdays.includes(currentWeekday);
+            
+            if (shouldAppearToday && !existingRecurringIds.includes(recurringTask.id)) {
+                const todayTask = {
+                    id: this.generateId(),
+                    title: recurringTask.title,
+                    description: recurringTask.description,
+                    completed: false,
+                    createdAt: this.getLocalDate().toISOString(),
+                    recurringTaskId: recurringTask.id
+                };
+                this.dailyTasks[this.currentDate].push(todayTask);
+            }
+        });
+        
+        this.saveData();
+    }
+
+    // Geração de ID único
+    generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
+
+    // Sincronização das tarefas de hoje com as tarefas recorrentes
+    syncTodayTasks() {
+        if (!this.dailyTasks[this.currentDate]) {
+            this.dailyTasks[this.currentDate] = [];
+        }
+        
+        // Obter o dia da semana atual (0=domingo, 1=segunda, etc.)
+        const localDate = this.getLocalDate();
+        const currentWeekday = localDate.getDay();
+        
+        // Adicionar tarefas recorrentes que ainda não existem para hoje
+        const existingRecurringIds = this.dailyTasks[this.currentDate].map(task => task.recurringTaskId);
+        
+        this.recurringTasks.forEach(recurringTask => {
+            // Verificar se a tarefa deve aparecer no dia atual da semana
+            const shouldAppearToday = recurringTask.weekdays && recurringTask.weekdays.includes(currentWeekday);
+            
+            if (shouldAppearToday && !existingRecurringIds.includes(recurringTask.id)) {
+                const todayTask = {
+                    id: this.generateId(),
+                    title: recurringTask.title,
+                    description: recurringTask.description,
+                    completed: false,
+                    createdAt: this.getLocalDate().toISOString(),
+                    recurringTaskId: recurringTask.id
+                };
+                this.dailyTasks[this.currentDate].push(todayTask);
+            }
+        });
+        
+        this.saveData();
+    }
+
+    // Limpeza de dados antigos
+    cleanOldData() {
+        const localDate = this.getLocalDate();
+        const thirtyDaysAgo = new Date(localDate.getTime() - (30 * 24 * 60 * 60 * 1000));
+        const thirtyDaysAgoString = thirtyDaysAgo.getFullYear() + '-' +
+            String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0') + '-' +
+            String(thirtyDaysAgo.getDate()).padStart(2, '0');
+
+        // Remover dados de tarefas diárias antigas
+        Object.keys(this.dailyTasks).forEach(date => {
+            if (date < thirtyDaysAgoString) {
+                delete this.dailyTasks[date];
+            }
+        });
+
+        // Remover dados de histórico antigos
+        Object.keys(this.history).forEach(date => {
+            if (date < thirtyDaysAgoString) {
+                delete this.history[date];
+            }
+        });
+
+        this.saveData();
+    }
+
+    // Atualização da interface
+    updateUI() {
+        this.renderTodayTasks();
+        this.renderRecurringTasks();
+        this.renderStats();
+        this.renderHistory();
+    }
+
+    // Atualização da exibição da data
+    updateDateDisplay() {
+        const localDate = this.getLocalDate();
+        
+        const options = { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        };
+        const dateString = localDate.toLocaleDateString('pt-BR', options);
+        document.getElementById('today-date').textContent = dateString;
+    }
+
+    // Renderização das tarefas de hoje
+    renderTodayTasks() {
+        const tasks = this.dailyTasks[this.currentDate] || [];
+        const container = document.getElementById('today-tasks');
+        const emptyState = document.getElementById('today-empty');
+
+        if (tasks.length === 0) {
+            container.innerHTML = '';
+            emptyState.style.display = 'block';
+        } else {
+            emptyState.style.display = 'none';
+            container.innerHTML = tasks.map(task => this.createTaskHTML(task, 'today')).join('');
+        }
+
+        this.updateTodayProgress();
+    }
+
+    // Renderização das tarefas recorrentes
+    renderRecurringTasks(filter = 'all') {
+        const container = document.getElementById('recurring-tasks');
+        const emptyState = document.getElementById('recurring-empty');
+        
+        let filteredTasks = this.recurringTasks;
+
+        // Apply filter
+        if (filter === 'active') {
+            const localDate = this.getLocalDate();
+            const currentWeekday = localDate.getDay();
+            filteredTasks = this.recurringTasks.filter(task => 
+                task.weekdays && task.weekdays.includes(currentWeekday)
+            );
+        } else if (filter === 'inactive') {
+            const localDate = this.getLocalDate();
+            const currentWeekday = localDate.getDay();
+            filteredTasks = this.recurringTasks.filter(task => 
+                !task.weekdays || !task.weekdays.includes(currentWeekday)
+            );
+        }
+
+        if (filteredTasks.length === 0) {
+            container.innerHTML = '';
+            emptyState.style.display = 'block';
+        } else {
+            emptyState.style.display = 'none';
+            container.innerHTML = filteredTasks.map(task => this.createRecurringTaskHTML(task)).join('');
+        }
+    }
+
+    // Criação do HTML de uma tarefa
+    createTaskHTML(task, type) {
+        return `
+            <div class="task-item ${task.completed ? 'completed' : ''}" data-task-id="${task.id}">
+                <div class="task-checkbox" data-task-id="${task.id}">
+                    ${task.completed ? '<i class="fas fa-check"></i>' : ''}
+                </div>
+                <div class="task-content">
+                    <div class="task-title">${task.title}</div>
+                    ${task.description ? `<div class="task-description">${task.description}</div>` : ''}
+                    <div class="task-meta">
+                        <span>Criado em: ${this.formatDateShort(task.createdAt)}</span>
+                    </div>
+                </div>
+                <div class="task-actions">
+                    <button class="task-btn" onclick="event.stopPropagation(); app.showTaskDetails('${task.id}', '${type}')">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // Criação do HTML de uma tarefa recorrente
+    createRecurringTaskHTML(task) {
+        const categoryLabels = {
+            personal: 'Pessoal',
+            work: 'Trabalho',
+            health: 'Saúde',
+            study: 'Estudo',
+            other: 'Outro'
+        };
+
+        // Formatar dias da semana
+        const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const weekdaysText = task.weekdays && task.weekdays.length > 0 
+            ? task.weekdays.map(day => weekdayNames[day]).join(', ')
+            : 'Todos os dias';
+
+        // Verificar se a tarefa está ativa hoje
+        const localDate = this.getLocalDate();
+        const currentWeekday = localDate.getDay();
+        const isActiveToday = task.weekdays && task.weekdays.includes(currentWeekday);
+        const activeClass = isActiveToday ? 'active-today' : '';
+
+        return `
+            <div class="task-item ${activeClass}" data-task-id="${task.id}">
+                <div class="task-content">
+                    <div class="task-title">
+                        ${task.title}
+                        ${isActiveToday ? '<span class="today-indicator"><i class="fas fa-star"></i></span>' : ''}
+                    </div>
+                    ${task.description ? `<div class="task-description">${task.description}</div>` : ''}
+                    <div class="task-meta">
+                        <span class="task-weekdays"><i class="fas fa-calendar-week"></i> ${weekdaysText}</span>
+                        <span>Criado em: ${this.formatDateShort(task.createdAt)}</span>
+                    </div>
+                </div>
+                <div class="task-actions">
+                    <button class="task-btn" onclick="event.stopPropagation(); app.showTaskDetails('${task.id}', 'recurring')">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="task-btn delete" onclick="event.stopPropagation(); app.deleteRecurringTask('${task.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // Atualização do progresso de hoje
+    updateTodayProgress() {
+        const tasks = this.dailyTasks[this.currentDate] || [];
+        const completedTasks = tasks.filter(task => task.completed).length;
+        const totalTasks = tasks.length;
+        const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+        // Update progress ring
+        const progressCircle = document.getElementById('progress-circle');
+        const progressText = document.getElementById('progress-text');
+        if (progressCircle && progressText) {
+            const circumference = 2 * Math.PI * 54; // r = 54
+            const offset = circumference - (percentage / 100) * circumference;
+            progressCircle.style.strokeDashoffset = offset;
+            progressText.textContent = `${percentage}%`;
+        }
+    }
+
+    // Alternar conclusão de tarefa
+    toggleTaskCompletion(taskId) {
+        const tasks = this.dailyTasks[this.currentDate];
+        const task = tasks.find(t => t.id === taskId);
+        
+        if (task) {
+            task.completed = !task.completed;
+            task.completedAt = task.completed ? this.getLocalDate().toISOString() : null;
+            
+            this.saveData();
+            this.updateTodayProgress();
+            this.updateHistory();
+            this.renderHistory();
+            this.renderStats();
+            this.updateTodayStats();
+            
+            // Update insights if on analytics tab
+            if (this.currentTab === 'analytics') {
+                this.renderInsights();
+            }
+            
+            // Mostrar notificação de sucesso
+            const status = task.completed ? 'concluída' : 'desmarcada';
+            this.showNotification(`Tarefa ${status} com sucesso!`, 'success');
+        }
+    }
+
+    // Adição de tarefa recorrente
+    addRecurringTask() {
+        const title = document.getElementById('task-title').value.trim();
+        const description = document.getElementById('task-description').value.trim();
+        
+        // Obter dias da semana selecionados
+        const selectedWeekdays = [];
+        for (let i = 0; i < 7; i++) {
+            const checkbox = document.getElementById(`weekday-${i}`);
+            if (checkbox && checkbox.checked) {
+                selectedWeekdays.push(i);
+            }
+        }
+
+        if (!title) {
+            alert('Por favor, insira um título para a tarefa.');
+            return;
+        }
+
+        // Se nenhum dia foi selecionado, marcar todos os dias (comportamento padrão)
+        if (selectedWeekdays.length === 0) {
+            for (let i = 0; i < 7; i++) {
+                selectedWeekdays.push(i);
+            }
+        }
+
+        const newTask = {
+            id: this.generateId(),
+            title: title,
+            description: description,
+            weekdays: selectedWeekdays, // Array com os dias da semana (0=domingo, 1=segunda, etc.)
+            createdAt: this.getLocalDate().toISOString()
+        };
+
+        this.recurringTasks.push(newTask);
+        
+        // Gerar tarefas para hoje se o dia atual estiver selecionado
+        this.generateTodayTasks();
+        
+        this.saveData();
+        this.hideAddTaskModal();
+        this.renderRecurringTasks();
+        this.renderTodayTasks();
+        this.updateTodayStats();
+        
+        // Update insights if on analytics tab
+        if (this.currentTab === 'analytics') {
+            this.renderInsights();
+        }
+        
+        // Show success message
+        this.showNotification('Tarefa adicionada com sucesso!', 'success');
+    }
+
+    // Exclusão de tarefa recorrente
+    deleteRecurringTask(taskId) {
+        if (confirm('Tem certeza que deseja excluir esta tarefa recorrente? Isso também removerá todas as instâncias futuras.')) {
+            this.recurringTasks = this.recurringTasks.filter(task => task.id !== taskId);
+            this.saveData();
+            this.renderRecurringTasks();
+            
+            // Regenerate today's tasks
+            this.generateTodayTasks();
+            this.updateTodayProgress();
+            this.updateHistory();
+            this.renderTodayTasks();
+            this.renderHistory();
+            this.renderStats();
+            this.updateTodayStats();
+            
+            // Update insights if on analytics tab
+            if (this.currentTab === 'analytics') {
+                this.renderInsights();
+            }
+            
+            this.showNotification('Tarefa excluída com sucesso!', 'success');
+        }
+    }
+
+    // Exclusão da tarefa atual (no modal de detalhes)
+    deleteCurrentTask() {
+        const taskId = this.currentTaskId;
+        const taskType = this.currentTaskType;
+
+        if (taskType === 'recurring') {
+            this.deleteRecurringTask(taskId);
+        } else {
+            // Remove from today's tasks
+            this.dailyTasks[this.currentDate] = this.dailyTasks[this.currentDate].filter(task => task.id !== taskId);
+            this.saveData();
+            this.updateTodayProgress();
+            this.updateHistory();
+            this.renderTodayTasks();
+            this.renderHistory();
+            this.renderStats();
+            this.updateTodayStats();
+            
+            // Update insights if on analytics tab
+            if (this.currentTab === 'analytics') {
+                this.renderInsights();
+            }
+        }
+
+        this.hideTaskDetailsModal();
+        this.showNotification('Tarefa excluída com sucesso!', 'success');
+    }
+
+    // Exibição do modal de adicionar tarefa
+    showAddTaskModal() {
+        document.getElementById('add-task-modal').classList.add('active');
+        document.body.classList.add('modal-open');
+        document.getElementById('task-title').focus();
+        
+        // Marcar automaticamente o dia atual da semana
+        const localDate = this.getLocalDate();
+        const currentWeekday = localDate.getDay();
+        const currentCheckbox = document.getElementById(`weekday-${currentWeekday}`);
+        if (currentCheckbox) {
+            currentCheckbox.checked = true;
+        }
+    }
+
+    // Ocultação do modal de adicionar tarefa
+    hideAddTaskModal() {
+        document.getElementById('add-task-modal').classList.remove('active');
+        document.body.classList.remove('modal-open');
+        document.getElementById('add-task-form').reset();
+    }
+
+    // Exibição dos detalhes da tarefa
+    showTaskDetails(taskId, type) {
+        this.currentTaskId = taskId;
+        this.currentTaskType = type;
+
+        let task;
+        if (type === 'recurring') {
+            task = this.recurringTasks.find(t => t.id === taskId);
+        } else {
+            task = this.dailyTasks[this.currentDate].find(t => t.id === taskId);
+        }
+
+        if (task) {
+            document.getElementById('task-details-title').textContent = task.title;
+            
+            const weekdayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+            const weekdaysText = task.weekdays && task.weekdays.length > 0 
+                ? task.weekdays.map(day => weekdayNames[day]).join(', ')
+                : 'Todos os dias';
+            
+            const detailsContent = `
+                <div class="task-details">
+                    <p><strong>Título:</strong> ${task.title}</p>
+                    ${task.description ? `<p><strong>Descrição:</strong> ${task.description}</p>` : ''}
+                    <p><strong>Criado em:</strong> ${this.formatDate(task.createdAt)}</p>
+                    ${type === 'recurring' ? `<p><strong>Repete em:</strong> ${weekdaysText}</p>` : ''}
+                </div>
+            `;
+
+            document.getElementById('task-details-content').innerHTML = detailsContent;
+            
+            // Show edit and toggle buttons only for recurring tasks
+            const editBtn = document.getElementById('edit-task-btn');
+            const toggleBtn = document.getElementById('toggle-task-btn');
+            const toggleText = document.getElementById('toggle-task-text');
+            
+            if (editBtn) {
+                editBtn.style.display = type === 'recurring' ? 'inline-flex' : 'none';
+            }
+            
+            if (toggleBtn && toggleText) {
+                toggleBtn.style.display = type === 'recurring' ? 'inline-flex' : 'none';
+                toggleText.textContent = 'Ativar'; // Changed from toggleText to toggleText
+                toggleBtn.innerHTML = `<i class="fas fa-toggle-on"></i> <span id="toggle-task-text">Ativar</span>`;
+            }
+
+            document.getElementById('task-details-modal').classList.add('active');
+            document.body.classList.add('modal-open');
+        }
+    }
+
+    // Ocultação do modal de detalhes da tarefa
+    hideTaskDetailsModal() {
+        document.getElementById('task-details-modal').classList.remove('active');
+        document.body.classList.remove('modal-open');
+    }
+
+    // Exibição do modal de editar tarefa
+    showEditTaskModal() {
+        const task = this.recurringTasks.find(t => t.id === this.currentTaskId);
+        if (task) {
+            // Preencher título e descrição
+            document.getElementById('edit-task-title').value = task.title;
+            document.getElementById('edit-task-description').value = task.description || '';
+            
+            // Preencher os checkboxes com os dias atuais
+            for (let i = 0; i < 7; i++) {
+                const checkbox = document.getElementById(`edit-weekday-${i}`);
+                if (checkbox) {
+                    checkbox.checked = task.weekdays && task.weekdays.includes(i);
+                }
+            }
+            
+            document.getElementById('edit-task-modal').classList.add('active');
+            document.body.classList.add('modal-open');
+        }
+    }
+
+    // Ocultação do modal de editar tarefa
+    hideEditTaskModal() {
+        document.getElementById('edit-task-modal').classList.remove('active');
+        document.body.classList.remove('modal-open');
+    }
+
+    // Salvamento da edição da tarefa
+    saveTaskEdit() {
+        const taskId = this.currentTaskId;
+        const task = this.recurringTasks.find(t => t.id === taskId);
+        
+        if (task) {
+            // Obter título e descrição
+            const title = document.getElementById('edit-task-title').value.trim();
+            const description = document.getElementById('edit-task-description').value.trim();
+            
+            if (!title) {
+                alert('Por favor, insira um título para a tarefa.');
+                return;
+            }
+            
+            // Obter dias da semana selecionados
+            const selectedWeekdays = [];
+            for (let i = 0; i < 7; i++) {
+                const checkbox = document.getElementById(`edit-weekday-${i}`);
+                if (checkbox && checkbox.checked) {
+                    selectedWeekdays.push(i);
+                }
+            }
+
+            if (selectedWeekdays.length === 0) {
+                alert('Por favor, selecione pelo menos um dia da semana.');
+                return;
+            }
+            
+            // Atualizar a tarefa
+            task.title = title;
+            task.description = description;
+            task.weekdays = selectedWeekdays;
+            
+            this.saveData();
+            this.hideEditTaskModal();
+            this.hideTaskDetailsModal();
+            this.renderRecurringTasks();
+            this.generateTodayTasks();
+            this.renderTodayTasks();
+            this.updateTodayStats();
+            
+            // Update insights if on analytics tab
+            if (this.currentTab === 'analytics') {
+                this.renderInsights();
+            }
+            
+            this.showNotification('Tarefa atualizada com sucesso!', 'success');
+        }
+    }
+
+    // Exibição de notificações
+    showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                <span>${message}</span>
+            </div>
+        `;
+
+        document.body.appendChild(notification);
+
+        // Show notification
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 100);
+
+        // Hide and remove notification
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+
+    // Renderização do histórico
+    renderHistory(filter = '7days') {
+        // Garantir que a data atual esteja correta antes de renderizar histórico
+        this.updateCurrentDate();
+        const container = document.getElementById('history-container');
+        const last7Days = this.getLast7Days();
+        
+        let filteredDays = last7Days;
+        if (filter === '30days') {
+            filteredDays = this.getLastNDays(30);
+        } else if (filter === '90days') {
+            filteredDays = this.getLastNDays(90);
+        }
+
+        // Filter out days with no tasks
+        const daysWithTasks = filteredDays.filter(date => {
+            const dayTasks = this.dailyTasks[date] || [];
+            return dayTasks.length > 0;
+        });
+
+        if (daysWithTasks.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-history"></i>
+                    <p>Nenhum histórico de atividades encontrado para este período.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const historyHTML = daysWithTasks.map(date => {
+            const dayTasks = this.dailyTasks[date] || [];
+            const completedTasks = dayTasks.filter(task => task.completed).length;
+            const totalTasks = dayTasks.length;
+            const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+            // Get progress color based on percentage
+            let progressColor = 'var(--text-secondary)';
+            let progressClass = '';
+            if (percentage >= 80) {
+                progressColor = 'var(--success-color)';
+                progressClass = 'success';
+            } else if (percentage >= 50) {
+                progressColor = 'var(--warning-color)';
+                progressClass = 'warning';
+            } else if (percentage > 0) {
+                progressColor = 'var(--danger-color)';
+                progressClass = 'danger';
+            }
+
+            return `
+                <div class="history-day">
+                    <div class="history-date">
+                        <i class="fas fa-calendar-day"></i>
+                        ${this.formatHistoryDate(date)}
+                    </div>
+                    <div class="history-progress ${progressClass}" style="--progress-color: ${progressColor};">
+                        ${totalTasks} tarefas • ${completedTasks} concluídas • ${percentage}% de progresso
+                    </div>
+                    <div class="history-tasks">
+                        ${dayTasks.map(task => `
+                            <div class="history-task ${task.completed ? 'completed' : ''}">
+                                <i class="fas fa-${task.completed ? 'check' : 'circle'}"></i>
+                                ${task.title}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = historyHTML;
+    }
+
+    // Obter os últimos N dias
+    getLastNDays(n) {
+        const dates = [];
+        const localDate = this.getLocalDate();
+        
+        for (let i = n - 1; i >= 0; i--) {
+            // Usar uma abordagem mais robusta para calcular datas passadas
+            const date = new Date(localDate.getFullYear(), localDate.getMonth(), localDate.getDate() - i);
+            const dateString = date.getFullYear() + '-' +
+                String(date.getMonth() + 1).padStart(2, '0') + '-' +
+                String(date.getDate()).padStart(2, '0');
+            dates.push(dateString);
+        }
+        
+        return dates;
+    }
+
+    // Obter os últimos 7 dias
+    getLast7Days() {
+        return this.getLastNDays(7);
+    }
+
+    // Atualização do histórico
+    updateHistory() {
+        const tasks = this.dailyTasks[this.currentDate] || [];
+        const completedTasks = tasks.filter(task => task.completed).length;
+        const totalTasks = tasks.length;
+        
+        this.history[this.currentDate] = {
+            total: totalTasks,
+            completed: completedTasks,
+            percentage: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+            tasks: tasks
+        };
+        
+        this.saveData();
+    }
+
+    // Formatação de data
+    formatDate(dateString) {
+        const date = new Date(dateString);
+        const options = { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        };
+        return date.toLocaleDateString('pt-BR', options);
+    }
+
+    // Formatação de data curta
+    formatDateShort(dateString) {
+        const date = new Date(dateString);
+        const options = { 
+            day: '2-digit', 
+            month: '2-digit', 
+            year: 'numeric' 
+        };
+        return date.toLocaleDateString('pt-BR', options);
+    }
+
+    // Renderização das estatísticas
+    renderStats() {
+        const stats = this.calculateStats(this.getLast7Days());
+        
+        document.getElementById('avg-completion').textContent = `${stats.avgCompletion}%`;
+        document.getElementById('streak-days').textContent = stats.streakDays;
+        document.getElementById('total-tasks').textContent = stats.totalTasks;
+        
+        // Update best day
+        const bestDay = this.calculateBestDay();
+        document.getElementById('best-day').textContent = bestDay;
+    }
+
+    // Cálculo das estatísticas
+    calculateStats(dates) {
+        let totalCompletion = 0;
+        let totalTasks = 0;
+        let streakDays = 0;
+        let currentStreak = 0;
+        let daysWithData = 0;
+
+        dates.forEach(date => {
+            const dayData = this.history[date];
+            if (dayData && dayData.total > 0) {
+                totalCompletion += dayData.percentage;
+                totalTasks += dayData.total;
+                daysWithData++;
+                
+                if (dayData.percentage >= 80) { // Consider 80%+ as a good day
+                    currentStreak++;
+                    streakDays = Math.max(streakDays, currentStreak);
+                } else {
+                    currentStreak = 0;
+                }
+            } else {
+                currentStreak = 0;
+            }
+        });
+
+        const avgCompletion = daysWithData > 0 ? Math.round(totalCompletion / daysWithData) : 0;
+
+        return {
+            avgCompletion,
+            totalTasks,
+            streakDays
+        };
+    }
+
+    // Cálculo do melhor dia
+    calculateBestDay() {
+        const weekdayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+        const weekdayStats = [0, 0, 0, 0, 0, 0, 0]; // [dom, seg, ter, qua, qui, sex, sab]
+        const weekdayCounts = [0, 0, 0, 0, 0, 0, 0];
+
+        Object.keys(this.history).forEach(date => {
+            const dayData = this.history[date];
+            if (dayData && dayData.total > 0) {
+                // Usar a data local para calcular o dia da semana
+                const dateParts = date.split('-');
+                const localDate = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+                const dayOfWeek = localDate.getDay();
+                
+                weekdayStats[dayOfWeek] += dayData.percentage;
+                weekdayCounts[dayOfWeek]++;
+            }
+        });
+
+        let bestDay = 0;
+        let bestAvg = 0;
+
+        weekdayStats.forEach((total, index) => {
+            if (weekdayCounts[index] > 0) {
+                const avg = total / weekdayCounts[index];
+                if (avg > bestAvg) {
+                    bestAvg = avg;
+                    bestDay = index;
+                }
+            }
+        });
+
+        return weekdayNames[bestDay];
+    }
+
+    // Mudança do período do gráfico
+    changeChartPeriod(period) {
+        this.currentChartPeriod = period;
+        this.renderChart();
+    }
+
+    // Obter datas por período
+    getDatesByPeriod(period) {
+        const localDate = this.getLocalDate();
+        const dates = [];
+
+        switch (period) {
+            case '7days':
+                for (let i = 6; i >= 0; i--) {
+                    // Usar uma abordagem mais robusta para calcular datas passadas
+                    const date = new Date(localDate.getFullYear(), localDate.getMonth(), localDate.getDate() - i);
+                    dates.push(this.formatDateForChart(date));
+                }
+                break;
+            case 'month':
+                const monthStart = new Date(localDate.getFullYear(), localDate.getMonth(), 1);
+                const monthEnd = new Date(localDate.getFullYear(), localDate.getMonth() + 1, 0);
+                for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+                    dates.push(this.formatDateForChart(new Date(d)));
+                }
+                break;
+            case 'year':
+                for (let month = 0; month < 12; month++) {
+                    const date = new Date(localDate.getFullYear(), month, 1);
+                    dates.push(this.formatDateForChart(date));
+                }
+                break;
+        }
+
+        return dates;
+    }
+
+    // Formatação de data para gráfico
+    formatDateForChart(date) {
+        return date.getFullYear() + '-' +
+            String(date.getMonth() + 1).padStart(2, '0') + '-' +
+            String(date.getDate()).padStart(2, '0');
+    }
+
+    // Cálculo de estatísticas por período
+    calculateStatsByPeriod(dates, period) {
+        const stats = [];
+
+        if (period === '7days') {
+            dates.forEach(date => {
+                const dayData = this.history[date];
+                stats.push({
+                    date: date,
+                    value: dayData ? dayData.percentage : 0,
+                    label: this.formatChartLabel(date)
+                });
+            });
+        } else if (period === 'month') {
+            // Group by week
+            const weeklyStats = [];
+            for (let i = 0; i < dates.length; i += 7) {
+                const weekDates = dates.slice(i, i + 7);
+                let weekTotal = 0;
+                let weekCount = 0;
+
+                weekDates.forEach(date => {
+                    const dayData = this.history[date];
+                    if (dayData) {
+                        weekTotal += dayData.percentage;
+                        weekCount++;
+                    }
+                });
+
+                weeklyStats.push({
+                    date: weekDates[0],
+                    value: weekCount > 0 ? Math.round(weekTotal / weekCount) : 0,
+                    label: `Semana ${Math.floor(i / 7) + 1}`
+                });
+            }
+            stats.push(...weeklyStats);
+        } else if (period === 'year') {
+            dates.forEach(date => {
+                const monthData = this.getMonthData(date);
+                stats.push({
+                    date: date,
+                    value: monthData.avgCompletion,
+                    label: this.formatChartLabel(date)
+                });
+            });
+        }
+
+        return stats;
+    }
+
+    // Obter dados do mês
+    getMonthData(monthStart) {
+        const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+        let totalCompletion = 0;
+        let dayCount = 0;
+
+        for (let d = new Date(monthStart); d <= monthEnd; d.setDate(d.getDate() + 1)) {
+            const dateString = this.formatDateForChart(d);
+            const dayData = this.history[dateString];
+            if (dayData) {
+                totalCompletion += dayData.percentage;
+                dayCount++;
+            }
+        }
+
+        return {
+            avgCompletion: dayCount > 0 ? Math.round(totalCompletion / dayCount) : 0
+        };
+    }
+
+    // Renderização do gráfico
+    renderChart() {
+        // Garantir que a data atual esteja correta antes de renderizar o gráfico
+        this.updateCurrentDate();
+        
+        const canvas = document.getElementById('progress-chart');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const dates = this.getDatesByPeriod(this.currentChartPeriod);
+        const stats = this.calculateStatsByPeriod(dates, this.currentChartPeriod);
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (stats.length === 0) return;
+
+        // Responsive canvas sizing
+        const container = canvas.parentElement;
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
+        
+        // Set canvas size based on container and device
+        const isMobile = window.innerWidth <= 768;
+        const canvasWidth = isMobile ? Math.max(600, containerWidth) : containerWidth;
+        const canvasHeight = isMobile ? 200 : containerHeight;
+        
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        const maxValue = Math.max(...stats.map(s => s.value));
+        const barWidth = canvasWidth / stats.length;
+        const maxBarHeight = canvasHeight - 80; // Leave space for labels
+        const barSpacing = isMobile ? barWidth * 0.3 : barWidth * 0.2;
+        const actualBarWidth = barWidth - barSpacing;
+
+        // Draw bars
+        stats.forEach((stat, index) => {
+            const x = index * barWidth + barWidth / 2;
+            const barHeight = maxValue > 0 ? (stat.value / maxValue) * maxBarHeight : 0;
+            const y = canvasHeight - 60 - barHeight;
+
+            // Bar gradient
+            const gradient = ctx.createLinearGradient(x - actualBarWidth/2, y, x - actualBarWidth/2, canvasHeight - 60);
+            gradient.addColorStop(0, '#6366f1');
+            gradient.addColorStop(1, '#818cf8');
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x - actualBarWidth/2, y, actualBarWidth, barHeight);
+
+            // Add hover effect (rounded corners)
+            ctx.save();
+            ctx.beginPath();
+            
+            // Fallback for roundRect if not supported
+            if (ctx.roundRect) {
+                ctx.roundRect(x - actualBarWidth/2, y, actualBarWidth, barHeight, 4);
+            } else {
+                // Manual rounded rectangle
+                const radius = 4;
+                const left = x - actualBarWidth/2;
+                const top = y;
+                const right = left + actualBarWidth;
+                const bottom = top + barHeight;
+                
+                ctx.moveTo(left + radius, top);
+                ctx.lineTo(right - radius, top);
+                ctx.quadraticCurveTo(right, top, right, top + radius);
+                ctx.lineTo(right, bottom - radius);
+                ctx.quadraticCurveTo(right, bottom, right - radius, bottom);
+                ctx.lineTo(left + radius, bottom);
+                ctx.quadraticCurveTo(left, bottom, left, bottom - radius);
+                ctx.lineTo(left, top + radius);
+                ctx.quadraticCurveTo(left, top, left + radius, top);
+            }
+            
+            ctx.clip();
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x - actualBarWidth/2, y, actualBarWidth, barHeight);
+            ctx.restore();
+
+            // Value label
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-primary');
+            ctx.font = isMobile ? '10px Inter' : '12px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${stat.value}%`, x, y - 10);
+
+            // Date label
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary');
+            ctx.font = isMobile ? '8px Inter' : '10px Inter';
+            const label = this.formatChartLabel(stat.date);
+            ctx.fillText(label, x, canvasHeight - 20);
+        });
+
+        // Add grid lines for better readability
+        this.drawChartGrid(ctx, canvasWidth, canvasHeight, maxValue);
+    }
+
+    // Draw grid lines for the chart
+    drawChartGrid(ctx, width, height, maxValue) {
+        ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--border-color');
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
+
+        // Horizontal grid lines
+        const gridLines = 5;
+        for (let i = 1; i < gridLines; i++) {
+            const y = height - 60 - (i * (height - 80) / gridLines);
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+
+        ctx.setLineDash([]);
+    }
+
+    // Formatação do label do gráfico
+    formatChartLabel(dateString) {
+        // Parse a data string no formato YYYY-MM-DD
+        const dateParts = dateString.split('-');
+        const year = parseInt(dateParts[0]);
+        const month = parseInt(dateParts[1]) - 1; // Mês é 0-indexed
+        const day = parseInt(dateParts[2]);
+        
+        // Criar data local
+        const date = new Date(year, month, day);
+        const isMobile = window.innerWidth <= 768;
+        
+        if (this.currentChartPeriod === '7days') {
+            if (isMobile) {
+                // Short format for mobile: "15/07"
+                return date.toLocaleDateString('pt-BR', { 
+                    day: '2-digit', 
+                    month: '2-digit' 
+                });
+            } else {
+                // Full format for desktop: "15 jul"
+                return date.toLocaleDateString('pt-BR', { 
+                    day: '2-digit', 
+                    month: 'short' 
+                });
+            }
+        } else if (this.currentChartPeriod === 'month') {
+            if (isMobile) {
+                // Short format for mobile: "S1", "S2", etc.
+                const weekNumber = Math.ceil(date.getDate() / 7);
+                return `S${weekNumber}`;
+            } else {
+                // Full format for desktop: "Semana 1"
+                const weekNumber = Math.ceil(date.getDate() / 7);
+                return `Semana ${weekNumber}`;
+            }
+        } else if (this.currentChartPeriod === 'year') {
+            if (isMobile) {
+                // Short format for mobile: "Jan", "Fev", etc.
+                return date.toLocaleDateString('pt-BR', { 
+                    month: 'short' 
+                });
+            } else {
+                // Full format for desktop: "Janeiro"
+                return date.toLocaleDateString('pt-BR', { 
+                    month: 'long' 
+                });
+            }
+        }
+        
+        return date.toLocaleDateString('pt-BR', { 
+            month: 'short', 
+            day: 'numeric' 
+        });
+    }
+
+    // Configuração do PWA
+    setupPWA() {
+        // Detectar mudanças na conectividade
+        window.addEventListener('online', () => {
+            this.updateOnlineStatus();
+        });
+
+        window.addEventListener('offline', () => {
+            this.updateOnlineStatus();
+        });
+
+        this.updateOnlineStatus();
+    }
+
+    // Atualização do status online
+    updateOnlineStatus() {
+        const statusElement = document.getElementById('online-status');
+        if (statusElement) {
+            if (navigator.onLine) {
+                statusElement.style.display = 'none';
+            } else {
+                statusElement.style.display = 'flex';
+            }
+        }
+    }
+
+    // Formatação de data para histórico
+    formatHistoryDate(dateString) {
+        // Parse a data string no formato YYYY-MM-DD
+        const dateParts = dateString.split('-');
+        const year = parseInt(dateParts[0]);
+        const month = parseInt(dateParts[1]) - 1; // Mês é 0-indexed
+        const day = parseInt(dateParts[2]);
+        
+        // Criar data local
+        const date = new Date(year, month, day);
+        const localDate = this.getLocalDate();
+        
+        // Calcular ontem de forma mais robusta
+        const yesterday = new Date(localDate);
+        yesterday.setDate(localDate.getDate() - 1);
+
+        // Comparar componentes de data diretamente
+        const isToday = date.getFullYear() === localDate.getFullYear() &&
+                       date.getMonth() === localDate.getMonth() &&
+                       date.getDate() === localDate.getDate();
+                       
+        const isYesterday = date.getFullYear() === yesterday.getFullYear() &&
+                           date.getMonth() === yesterday.getMonth() &&
+                           date.getDate() === yesterday.getDate();
+
+        if (isToday) {
+            return 'Hoje';
+        } else if (isYesterday) {
+            return 'Ontem';
+        } else {
+            const options = { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long' 
+            };
+            return date.toLocaleDateString('pt-BR', options);
+        }
+    }
+
+    // Obter data local correta
+    getLocalDate() {
+        const now = new Date();
+        return new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
+    }
+
+    // Atualizar a data atual
+    updateCurrentDate() {
+        const localDate = this.getLocalDate();
+        this.currentDate = localDate.getFullYear() + '-' +
+            String(localDate.getMonth() + 1).padStart(2, '0') + '-' +
+            String(localDate.getDate()).padStart(2, '0');
+    }
+}
+
+// Inicialização do aplicativo
+const app = new DailyTodoApp(); 
