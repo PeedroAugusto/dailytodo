@@ -1274,16 +1274,28 @@ class DailyTodoApp {
 
             document.getElementById('task-details-content').innerHTML = detailsContent;
             
-            // Show edit and delete buttons for recurring tasks and today-only tasks
+            // Show edit and delete buttons based on current tab
             const editBtn = document.getElementById('edit-task-btn');
             const deleteBtn = document.getElementById('delete-task-btn');
             
             if (editBtn) {
-                editBtn.style.display = (type === 'recurring' || task.isTodayOnly) ? 'inline-flex' : 'none';
+                // Hide edit button if we're on the "today" tab (except for today-only tasks)
+                if (this.currentTab === 'today') {
+                    editBtn.style.display = 'none';
+                } else {
+                    // Show edit button for recurring tasks and today-only tasks in other tabs
+                    editBtn.style.display = 'inline-flex';
+                }
             }
             
             if (deleteBtn) {
-                deleteBtn.style.display = (type === 'recurring' || task.isTodayOnly) ? 'inline-flex' : 'none';
+                // Hide delete button if we're on the "today" tab (except for today-only tasks)
+                if (this.currentTab === 'today') {
+                    deleteBtn.style.display = 'none';
+                } else {
+                    // Show delete button for recurring tasks and today-only tasks in other tabs
+                    deleteBtn.style.display = 'inline-flex';
+                }
             }
 
             document.getElementById('task-details-modal').classList.add('active');
