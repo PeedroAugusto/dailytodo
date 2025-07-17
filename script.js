@@ -2206,4 +2206,18 @@ class DailyTodoApp {
 }
 
 // Inicialização do aplicativo
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(reg => {
+          console.log('[SW] Registrado com sucesso');
+          reg.update(); // força update da versão nova
+        })
+        .catch(err => {
+          console.log('[SW] Falha ao registrar', err);
+        });
+    });
+  }
+  
 const app = new DailyTodoApp(); 

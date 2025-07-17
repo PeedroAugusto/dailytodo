@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v1.0.3'; // Altere sempre que fizer deploy!
+const CACHE_VERSION = 'v1.0.6'; // Altere sempre que fizer deploy!
 const CACHE_NAME = `daily-todo-${CACHE_VERSION}`;
 
 const urlsToCache = [
@@ -13,81 +13,43 @@ const urlsToCache = [
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/webfonts/fa-solid-900.woff2'
 ];
 
-// Instalação
-self.addEventListener('install', (event) => {
-  console.log('[SW] Instalando...');
+self.addEventListener('install', event => {
+  console.log('[ServiceWorker] Instalando...');
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(cache => {
+      console.log('[ServiceWorker] Cacheando arquivos');
+      return cache.addAll(URLS_TO_CACHE);
+    })
   );
 });
 
-// Ativação: limpa caches antigos
-self.addEventListener('activate', (event) => {
-  console.log('[SW] Ativando...');
+self.addEventListener('activate', event => {
+  console.log('[ServiceWorker] Ativando e limpando caches antigos...');
   event.waitUntil(
-    caches.keys().then((keys) =>
+    caches.keys().then(cacheNames =>
       Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            console.log('[SW] Deletando cache antigo:', key);
-            return caches.delete(key);
+        cacheNames.map(name => {
+          if (name !== CACHE_NAME) {
+            console.log('[ServiceWorker] Deletando cache antigo:', name);
+            return caches.delete(name);
           }
         })
       )
-    ).then(() => self.clients.claim())
+    )
   );
 });
 
-// Fetch: rede primeiro, fallback cache
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-
+self.addEventListener('fetch', event => {
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone);
-        });
-        return response;
-      })
-      .catch(() => {
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) return cachedResponse;
-
-          if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/index.html');
-          }
-        });
-      })
+    caches.match(event.request).then(response => {
+      return response || fetch(event.request).catch(() => {
+        // Fallback para offline, se quiser
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+      });
+    })
   );
 });
 
-// Push notification
-self.addEventListener('push', (event) => {
-  const options = {
-    body: event.data?.text() || 'Nova notificação!',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-72x72.png',
-    vibrate: [100, 50, 100],
-    data: { dateOfArrival: Date.now() },
-    actions: [
-      { action: 'explore', title: 'Abrir App', icon: '/icons/icon-72x72.png' },
-      { action: 'close', title: 'Fechar', icon: '/icons/icon-72x72.png' }
-    ]
-  };
 
-  event.waitUntil(
-    self.registration.showNotification('Daily To-Do', options)
-  );
-});
-
-// Notificação clicada
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  if (event.action === 'explore') {
-    event.waitUntil(clients.openWindow('/'));
-  }
-});
