@@ -71,8 +71,8 @@
                     <span>Hoje</span>
                 </button>
                 <button class="tab-btn" data-tab="recurring">
-                    <i class="fas fa-redo"></i>
-                    <span>Recorrentes</span>
+                    <i class="fas fa-tasks"></i>
+                    <span>Tarefas</span>
                 </button>
                 <button class="tab-btn" data-tab="analytics">
                     <i class="fas fa-chart-line"></i>
@@ -137,10 +137,10 @@
                 </div>
             </div>
 
-            <!-- Recurring Tab -->
+            <!-- Tarefas Tab -->
             <div class="tab-content" id="recurring-tab">
                 <div class="recurring-header">
-                    <h2>Tarefas Recorrentes</h2>
+                    <h2>Minhas Tarefas</h2>
                     <button class="btn btn-primary" id="add-recurring-btn">
                         <i class="fas fa-plus"></i> Nova Tarefa
                     </button>
@@ -151,9 +151,13 @@
                         <i class="fas fa-list"></i>
                         <span>Todas</span>
                     </button>
-                    <button class="filter-btn" data-filter="active">
-                        <i class="fas fa-star"></i>
-                        <span>Ativas Hoje</span>
+                    <button class="filter-btn" data-filter="recurring">
+                        <i class="fas fa-redo"></i>
+                        <span>Recorrentes</span>
+                    </button>
+                    <button class="filter-btn" data-filter="today-only">
+                        <i class="fas fa-calendar-day"></i>
+                        <span>Para Hoje</span>
                     </button>
                 </div>
 
@@ -162,8 +166,8 @@
                 </div>
 
                 <div class="empty-state" id="recurring-empty" style="display: none;">
-                    <i class="fas fa-redo"></i>
-                    <p>Nenhuma tarefa recorrente cadastrada. Adicione sua primeira tarefa!</p>
+                    <i class="fas fa-tasks"></i>
+                    <p>Nenhuma tarefa cadastrada. Adicione sua primeira tarefa!</p>
                 </div>
             </div>
 
@@ -171,6 +175,59 @@
             <div class="tab-content" id="analytics-tab">
                 <div class="analytics-header">
                     <h2>Analytics de Produtividade</h2>
+                </div>
+
+                <div class="analytics-grid">
+                    <div class="analytics-card">
+                        <div class="card-header">
+                            <h3>Média de Conclusão</h3>
+                            <i class="fas fa-trophy"></i>
+                        </div>
+                        <div class="card-value" id="avg-completion">0%</div>
+                        <div class="card-trend positive">
+                            <i class="fas fa-arrow-up"></i>
+                            <span id="trend-completion"></span>
+                        </div>
+                    </div>
+
+                    <div class="analytics-card">
+                        <div class="card-header">
+                            <h3>Dias Consecutivos</h3>
+                            <i class="fas fa-fire"></i>
+                        </div>
+                        <div class="card-value" id="streak-days">0</div>
+                        <div class="card-trend positive">
+                            <i class="fas fa-arrow-up"></i>
+                            <span id="trend-streak"></span>
+                        </div>
+                    </div>
+
+                    <div class="analytics-card">
+                        <div class="card-header">
+                            <h3>Total de Tarefas</h3>
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <div class="card-value" id="total-tasks">0</div>
+                        <div class="card-trend positive">
+                            <i class="fas fa-arrow-up"></i>
+                            <span id="trend-total"></span>
+                        </div>
+                    </div>
+
+                    <div class="analytics-card">
+                        <div class="card-header">
+                            <h3>Melhor Dia</h3>
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="card-value" id="best-day">Segunda</div>
+                        <div class="card-trend">
+                            <span id="trend-bestday"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-controls">
+                    <h3>Progresso ao Longo do Tempo</h3>
                     <div class="period-selector">
                         <button class="period-btn active" data-period="7days">
                             <i class="fas fa-calendar-week"></i>
@@ -187,57 +244,7 @@
                     </div>
                 </div>
 
-                <div class="analytics-grid">
-                    <div class="analytics-card">
-                        <div class="card-header">
-                            <h3>Média de Conclusão</h3>
-                            <i class="fas fa-trophy"></i>
-                        </div>
-                        <div class="card-value" id="avg-completion">0%</div>
-                        <div class="card-trend positive">
-                            <i class="fas fa-arrow-up"></i>
-                            <span>+5% esta semana</span>
-                        </div>
-                    </div>
-
-                    <div class="analytics-card">
-                        <div class="card-header">
-                            <h3>Dias Consecutivos</h3>
-                            <i class="fas fa-fire"></i>
-                        </div>
-                        <div class="card-value" id="streak-days">0</div>
-                        <div class="card-trend positive">
-                            <i class="fas fa-arrow-up"></i>
-                            <span>+2 dias</span>
-                        </div>
-                    </div>
-
-                    <div class="analytics-card">
-                        <div class="card-header">
-                            <h3>Total de Tarefas</h3>
-                            <i class="fas fa-tasks"></i>
-                        </div>
-                        <div class="card-value" id="total-tasks">0</div>
-                        <div class="card-trend positive">
-                            <i class="fas fa-arrow-up"></i>
-                            <span>+3 esta semana</span>
-                        </div>
-                    </div>
-
-                    <div class="analytics-card">
-                        <div class="card-header">
-                            <h3>Melhor Dia</h3>
-                            <i class="fas fa-star"></i>
-                        </div>
-                        <div class="card-value" id="best-day">Segunda</div>
-                        <div class="card-trend">
-                            <span>95% de conclusão</span>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="chart-section">
-                    <h3>Progresso ao Longo do Tempo</h3>
                     <div class="chart-container">
                         <canvas id="progress-chart" width="800" height="300"></canvas>
                     </div>
@@ -282,7 +289,7 @@
     <div class="modal" id="add-task-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3><i class="fas fa-plus-circle"></i> Adicionar Tarefa Recorrente</h3>
+                <h3><i class="fas fa-plus-circle"></i> Adicionar Tarefa</h3>
                 <button class="close-btn" id="close-modal">
                     <i class="fas fa-times"></i>
                 </button>
@@ -300,6 +307,19 @@
                     </div>
 
                     <div class="form-group">
+                        <label><i class="fas fa-toggle-on"></i> Tipo de Tarefa</label>
+                        <div class="task-type-toggle">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="task-type-toggle">
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label-left">Para Hoje</span>
+                                <span class="toggle-label-right">Recorrente</span>
+                            </label>
+                        </div>
+                        <small class="form-help">Escolha se a tarefa é apenas para hoje ou se repete semanalmente</small>
+                    </div>
+
+                    <div class="form-group" id="recurring-options">
                         <label><i class="fas fa-calendar-week"></i> Repetição</label>
                         <div class="weekdays-selector">
                             <label class="weekday-checkbox">
@@ -394,7 +414,21 @@
                         <textarea id="edit-task-description"
                             placeholder="Adicione uma descrição detalhada para a tarefa..."></textarea>
                     </div>
+
                     <div class="form-group">
+                        <label><i class="fas fa-toggle-on"></i> Tipo de Tarefa</label>
+                        <div class="task-type-toggle">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="edit-task-type-toggle">
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label-left">Para Hoje</span>
+                                <span class="toggle-label-right">Recorrente</span>
+                            </label>
+                        </div>
+                        <small class="form-help">Escolha se a tarefa é apenas para hoje ou se repete semanalmente</small>
+                    </div>
+
+                    <div class="form-group" id="edit-recurring-options">
                         <label><i class="fas fa-calendar-week"></i> Repetição</label>
                         <div class="weekdays-selector">
                             <label class="weekday-checkbox">

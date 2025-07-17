@@ -162,8 +162,38 @@ class DailyTodoApp {
         // Form submission
         document.getElementById('add-task-form').addEventListener('submit', (e) => {
             e.preventDefault();
-            this.addRecurringTask();
+            this.addTask();
         });
+
+        // Task type toggle
+        const taskTypeToggle = document.getElementById('task-type-toggle');
+        if (taskTypeToggle) {
+            taskTypeToggle.addEventListener('change', () => {
+                this.toggleTaskType();
+                
+                // Se está mudando para "Recorrente", marcar o dia atual
+                if (taskTypeToggle.checked) {
+                    const localDate = this.getLocalDate();
+                    const currentWeekday = localDate.getDay();
+                    
+                    // Marcar apenas o dia atual
+                    for (let i = 0; i < 7; i++) {
+                        const checkbox = document.getElementById(`weekday-${i}`);
+                        if (checkbox) {
+                            checkbox.checked = (i === currentWeekday);
+                        }
+                    }
+                }
+            });
+        }
+
+        // Edit task type toggle
+        const editTaskTypeToggle = document.getElementById('edit-task-type-toggle');
+        if (editTaskTypeToggle) {
+            editTaskTypeToggle.addEventListener('change', () => {
+                this.toggleEditTaskType();
+            });
+        }
 
         // Delete task
         document.getElementById('delete-task-btn').addEventListener('click', () => {
@@ -640,12 +670,14 @@ class DailyTodoApp {
         
         // Adicionar tarefas recorrentes que ainda não existem para hoje
         const existingRecurringIds = this.dailyTasks[this.currentDate].map(task => task.recurringTaskId);
+        const existingTaskIds = this.dailyTasks[this.currentDate].map(task => task.id);
         
         this.recurringTasks.forEach(recurringTask => {
             // Verificar se a tarefa deve aparecer no dia atual da semana
             const shouldAppearToday = recurringTask.weekdays && recurringTask.weekdays.includes(currentWeekday);
-            
-            if (shouldAppearToday && !existingRecurringIds.includes(recurringTask.id)) {
+            // Verificar se não existe uma tarefa com este ID ou recurringTaskId
+            const taskExists = existingRecurringIds.includes(recurringTask.id) || existingTaskIds.includes(recurringTask.id);
+            if (shouldAppearToday && !taskExists) {
                 const todayTask = {
                     id: this.generateId(),
                     title: recurringTask.title,
@@ -658,7 +690,21 @@ class DailyTodoApp {
             }
         });
         
+        // Remover duplicações baseadas no ID
+        const uniqueTasks = [];
+        const seenIds = new Set();
+        
+        this.dailyTasks[this.currentDate].forEach(task => {
+            if (!seenIds.has(task.id)) {
+                seenIds.add(task.id);
+                uniqueTasks.push(task);
+            }
+        });
+        
+        this.dailyTasks[this.currentDate] = uniqueTasks;
+        
         this.saveData();
+        this.updateHistory();
     }
 
     // Geração de ID único
@@ -707,6 +753,19 @@ class DailyTodoApp {
                 this.dailyTasks[this.currentDate].push(todayTask);
             }
         });
+        
+        // Remover duplicações baseadas no ID
+        const uniqueTasks = [];
+        const seenIds = new Set();
+        
+        this.dailyTasks[this.currentDate].forEach(task => {
+            if (!seenIds.has(task.id)) {
+                seenIds.add(task.id);
+                uniqueTasks.push(task);
+            }
+        });
+        
+        this.dailyTasks[this.currentDate] = uniqueTasks;
         
         this.saveData();
     }
@@ -775,46 +834,64 @@ class DailyTodoApp {
         this.updateTodayProgress();
     }
 
-    // Renderização das tarefas recorrentes
+    // Renderização das tarefas (recorrentes + para hoje)
     renderRecurringTasks(filter = 'all') {
         const container = document.getElementById('recurring-tasks');
         const emptyState = document.getElementById('recurring-empty');
         
-        let filteredTasks = this.recurringTasks;
+        // Combinar tarefas recorrentes e tarefas para hoje
+        let allTasks = [...this.recurringTasks];
+        
+        // Adicionar tarefas para hoje se existirem
+        if (this.dailyTasks[this.currentDate]) {
+            const todayOnlyTasks = this.dailyTasks[this.currentDate].filter(task => task.isTodayOnly);
+            allTasks = allTasks.concat(todayOnlyTasks);
+        }
+
+        // Remover duplicações baseadas no ID
+        const uniqueTasks = [];
+        const seenIds = new Set();
+        
+        allTasks.forEach(task => {
+            if (!seenIds.has(task.id)) {
+                seenIds.add(task.id);
+                uniqueTasks.push(task);
+            }
+        });
+
+        let filteredTasks = uniqueTasks;
 
         // Apply filter
-        if (filter === 'active') {
-            const localDate = this.getLocalDate();
-            const currentWeekday = localDate.getDay();
-            filteredTasks = this.recurringTasks.filter(task => 
-                task.weekdays && task.weekdays.includes(currentWeekday)
-            );
-        } else if (filter === 'inactive') {
-            const localDate = this.getLocalDate();
-            const currentWeekday = localDate.getDay();
-            filteredTasks = this.recurringTasks.filter(task => 
-                !task.weekdays || !task.weekdays.includes(currentWeekday)
-            );
+        if (filter === 'recurring') {
+            filteredTasks = uniqueTasks.filter(task => !task.isTodayOnly);
+        } else if (filter === 'today-only') {
+            filteredTasks = uniqueTasks.filter(task => task.isTodayOnly);
         }
+        // 'all' mostra todas as tarefas (recorrentes + para hoje)
 
         if (filteredTasks.length === 0) {
             container.innerHTML = '';
             emptyState.style.display = 'block';
         } else {
             emptyState.style.display = 'none';
-            container.innerHTML = filteredTasks.map(task => this.createRecurringTaskHTML(task)).join('');
+            container.innerHTML = filteredTasks.map(task => this.createTaskItemHTML(task)).join('');
         }
     }
 
     // Criação do HTML de uma tarefa
     createTaskHTML(task, type) {
+        const todayOnlyIndicator = task.isTodayOnly ? '<span class="today-only-indicator"><i class="fas fa-calendar-day"></i> Hoje</span>' : '';
+        
         return `
             <div class="task-item ${task.completed ? 'completed' : ''}" data-task-id="${task.id}">
                 <div class="task-checkbox" data-task-id="${task.id}">
                     ${task.completed ? '<i class="fas fa-check"></i>' : ''}
                 </div>
                 <div class="task-content">
-                    <div class="task-title">${task.title}</div>
+                    <div class="task-title">
+                        ${task.title}
+                        ${todayOnlyIndicator}
+                    </div>
                     ${task.description ? `<div class="task-description">${task.description}</div>` : ''}
                     <div class="task-meta">
                         <span>Criado em: ${this.formatDateShort(task.createdAt)}</span>
@@ -868,12 +945,39 @@ class DailyTodoApp {
                     <button class="task-btn" onclick="event.stopPropagation(); app.showTaskDetails('${task.id}', 'recurring')">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <button class="task-btn delete" onclick="event.stopPropagation(); app.deleteRecurringTask('${task.id}')">
-                        <i class="fas fa-trash"></i>
-                    </button>
                 </div>
             </div>
         `;
+    }
+
+    // Criação do HTML de um item de tarefa para a tab "Tarefas"
+    createTaskItemHTML(task) {
+        if (task.isTodayOnly) {
+            // Tarefa apenas para hoje
+            return `
+                <div class="task-item" data-task-id="${task.id}">
+                    <div class="task-content">
+                        <div class="task-title">
+                            ${task.title}
+                            <span class="today-only-indicator"><i class="fas fa-calendar-day"></i> Hoje</span>
+                        </div>
+                        ${task.description ? `<div class="task-description">${task.description}</div>` : ''}
+                        <div class="task-meta">
+                            <span><i class="fas fa-calendar-day"></i> Apenas para hoje</span>
+                            <span>Criado em: ${this.formatDateShort(task.createdAt)}</span>
+                        </div>
+                    </div>
+                    <div class="task-actions">
+                        <button class="task-btn" onclick="event.stopPropagation(); app.showTaskDetails('${task.id}', 'today')">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Tarefa recorrente
+            return this.createRecurringTaskHTML(task);
+        }
     }
 
     // Atualização do progresso de hoje
@@ -921,11 +1025,56 @@ class DailyTodoApp {
         }
     }
 
-    // Adição de tarefa recorrente
-    addRecurringTask() {
+    // Controle do toggle de tipo de tarefa
+    toggleTaskType() {
+        const taskTypeToggle = document.getElementById('task-type-toggle');
+        const recurringOptions = document.getElementById('recurring-options');
+        
+        if (taskTypeToggle.checked) {
+            // Tarefa recorrente - mostrar opções de dias da semana
+            recurringOptions.style.display = 'block';
+        } else {
+            // Tarefa para hoje - esconder opções de dias da semana
+            recurringOptions.style.display = 'none';
+        }
+    }
+
+    // Controle do toggle de tipo de tarefa no modal de edição
+    toggleEditTaskType() {
+        const editTaskTypeToggle = document.getElementById('edit-task-type-toggle');
+        const editRecurringOptions = document.getElementById('edit-recurring-options');
+        
+        if (editTaskTypeToggle.checked) {
+            // Tarefa recorrente - mostrar opções de dias da semana
+            editRecurringOptions.style.display = 'block';
+        } else {
+            // Tarefa para hoje - esconder opções de dias da semana
+            editRecurringOptions.style.display = 'none';
+        }
+    }
+
+    // Adição de tarefa (recorrente ou para hoje)
+    addTask() {
         const title = document.getElementById('task-title').value.trim();
         const description = document.getElementById('task-description').value.trim();
+        const taskTypeToggle = document.getElementById('task-type-toggle');
         
+        if (!title) {
+            alert('Por favor, insira um título para a tarefa.');
+            return;
+        }
+
+        if (taskTypeToggle.checked) {
+            // Criar tarefa recorrente
+            this.addRecurringTask(title, description);
+        } else {
+            // Criar tarefa para hoje
+            this.addTodayTask(title, description);
+        }
+    }
+
+    // Adição de tarefa recorrente
+    addRecurringTask(title, description) {
         // Obter dias da semana selecionados
         const selectedWeekdays = [];
         for (let i = 0; i < 7; i++) {
@@ -933,11 +1082,6 @@ class DailyTodoApp {
             if (checkbox && checkbox.checked) {
                 selectedWeekdays.push(i);
             }
-        }
-
-        if (!title) {
-            alert('Por favor, insira um título para a tarefa.');
-            return;
         }
 
         // Se nenhum dia foi selecionado, marcar todos os dias (comportamento padrão)
@@ -961,18 +1105,42 @@ class DailyTodoApp {
         this.generateTodayTasks();
         
         this.saveData();
-        this.hideAddTaskModal();
+        this.updateHistory();
         this.renderRecurringTasks();
         this.renderTodayTasks();
+        this.renderStats();
         this.updateTodayStats();
         
-        // Update insights if on analytics tab
-        if (this.currentTab === 'analytics') {
-            this.renderInsights();
+        this.hideAddTaskModal();
+        this.showNotification('Tarefa recorrente criada com sucesso!', 'success');
+    }
+
+    // Adição de tarefa para hoje
+    addTodayTask(title, description) {
+        if (!this.dailyTasks[this.currentDate]) {
+            this.dailyTasks[this.currentDate] = [];
         }
+
+        const newTask = {
+            id: this.generateId(),
+            title: title,
+            description: description,
+            completed: false,
+            createdAt: this.getLocalDate().toISOString(),
+            isTodayOnly: true // Marca que é uma tarefa apenas para hoje
+        };
+
+        this.dailyTasks[this.currentDate].push(newTask);
         
-        // Show success message
-        this.showNotification('Tarefa adicionada com sucesso!', 'success');
+        this.saveData();
+        this.updateHistory();
+        this.renderTodayTasks();
+        this.renderRecurringTasks(); // Atualizar também a tab "Tarefas"
+        this.renderStats();
+        this.updateTodayStats();
+        
+        this.hideAddTaskModal();
+        this.showNotification('Tarefa para hoje criada com sucesso!', 'success');
     }
 
     // Exclusão de tarefa recorrente
@@ -1007,20 +1175,16 @@ class DailyTodoApp {
         }
     }
 
-    // Exclusão da tarefa atual (no modal de detalhes)
-    deleteCurrentTask() {
-        const taskId = this.currentTaskId;
-        const taskType = this.currentTaskType;
-
-        if (taskType === 'recurring') {
-            this.deleteRecurringTask(taskId);
-        } else {
+    // Exclusão de tarefa para hoje
+    deleteTodayTask(taskId) {
+        if (confirm('Tem certeza que deseja excluir esta tarefa?')) {
             // Remove from today's tasks
             this.dailyTasks[this.currentDate] = this.dailyTasks[this.currentDate].filter(task => task.id !== taskId);
             this.saveData();
             this.updateTodayProgress();
             this.updateHistory();
             this.renderTodayTasks();
+            this.renderRecurringTasks(); // Atualizar também a tab "Tarefas"
             this.renderHistory();
             this.renderStats();
             this.updateTodayStats();
@@ -1029,10 +1193,23 @@ class DailyTodoApp {
             if (this.currentTab === 'analytics') {
                 this.renderInsights();
             }
+            
+            this.showNotification('Tarefa excluída com sucesso!', 'success');
+        }
+    }
+
+    // Exclusão da tarefa atual (no modal de detalhes)
+    deleteCurrentTask() {
+        const taskId = this.currentTaskId;
+        const taskType = this.currentTaskType;
+
+        if (taskType === 'recurring') {
+            this.deleteRecurringTask(taskId);
+        } else {
+            this.deleteTodayTask(taskId);
         }
 
         this.hideTaskDetailsModal();
-        this.showNotification('Tarefa excluída com sucesso!', 'success');
     }
 
     // Exibição do modal de adicionar tarefa
@@ -1041,7 +1218,15 @@ class DailyTodoApp {
         document.body.classList.add('modal-open');
         document.getElementById('task-title').focus();
         
-        // Marcar automaticamente o dia atual da semana
+        // Inicializar o toggle para "Para Hoje" (não marcado)
+        const taskTypeToggle = document.getElementById('task-type-toggle');
+        const recurringOptions = document.getElementById('recurring-options');
+        if (taskTypeToggle) {
+            taskTypeToggle.checked = false;
+            recurringOptions.style.display = 'none';
+        }
+        
+        // Marcar automaticamente o dia atual da semana (para quando for recorrente)
         const localDate = this.getLocalDate();
         const currentWeekday = localDate.getDay();
         const currentCheckbox = document.getElementById(`weekday-${currentWeekday}`);
@@ -1083,21 +1268,22 @@ class DailyTodoApp {
                     ${task.description ? `<p><strong>Descrição:</strong> ${task.description}</p>` : ''}
                     <p><strong>Criado em:</strong> ${this.formatDate(task.createdAt)}</p>
                     ${type === 'recurring' ? `<p><strong>Repete em:</strong> ${weekdaysText}</p>` : ''}
+                    ${task.isTodayOnly ? `<p><strong>Tipo:</strong> <span class="task-status active">Apenas para hoje</span></p>` : ''}
                 </div>
             `;
 
             document.getElementById('task-details-content').innerHTML = detailsContent;
             
-            // Show edit and delete buttons only for recurring tasks
+            // Show edit and delete buttons for recurring tasks and today-only tasks
             const editBtn = document.getElementById('edit-task-btn');
             const deleteBtn = document.getElementById('delete-task-btn');
             
             if (editBtn) {
-                editBtn.style.display = type === 'recurring' ? 'inline-flex' : 'none';
+                editBtn.style.display = (type === 'recurring' || task.isTodayOnly) ? 'inline-flex' : 'none';
             }
             
             if (deleteBtn) {
-                deleteBtn.style.display = type === 'recurring' ? 'inline-flex' : 'none';
+                deleteBtn.style.display = (type === 'recurring' || task.isTodayOnly) ? 'inline-flex' : 'none';
             }
 
             document.getElementById('task-details-modal').classList.add('active');
@@ -1113,18 +1299,57 @@ class DailyTodoApp {
 
     // Exibição do modal de editar tarefa
     showEditTaskModal() {
-        const task = this.recurringTasks.find(t => t.id === this.currentTaskId);
+        let task = this.recurringTasks.find(t => t.id === this.currentTaskId);
+        let isTodayOnly = false;
+        
+        // Se não encontrou nas tarefas recorrentes, procurar nas tarefas de hoje
+        if (!task && this.dailyTasks[this.currentDate]) {
+            task = this.dailyTasks[this.currentDate].find(t => t.id === this.currentTaskId);
+            isTodayOnly = task && task.isTodayOnly;
+        }
+        
         if (task) {
             // Preencher título e descrição
             document.getElementById('edit-task-title').value = task.title;
             document.getElementById('edit-task-description').value = task.description || '';
             
-            // Preencher os checkboxes com os dias atuais
-            for (let i = 0; i < 7; i++) {
-                const checkbox = document.getElementById(`edit-weekday-${i}`);
-                if (checkbox) {
-                    checkbox.checked = task.weekdays && task.weekdays.includes(i);
+            // Configurar o toggle baseado no tipo da tarefa
+            const editTaskTypeToggle = document.getElementById('edit-task-type-toggle');
+            const editRecurringOptions = document.getElementById('edit-recurring-options');
+            if (editTaskTypeToggle) {
+                if (isTodayOnly) {
+                    // Tarefa para hoje - toggle desmarcado
+                    editTaskTypeToggle.checked = false;
+                    editRecurringOptions.style.display = 'none';
+                } else {
+                    // Tarefa recorrente - toggle marcado
+                    editRecurringOptions.style.display = 'block';
+                    
+                    // Preencher os checkboxes com os dias atuais
+                    for (let i = 0; i < 7; i++) {
+                        const checkbox = document.getElementById(`edit-weekday-${i}`);
+                        if (checkbox) {
+                            checkbox.checked = task.weekdays && task.weekdays.includes(i);
+                        }
+                    }
                 }
+                
+                // Adicionar event listener para quando o toggle mudar
+                editTaskTypeToggle.addEventListener('change', () => {
+                    if (editTaskTypeToggle.checked && isTodayOnly) {
+                        // Se está convertendo de "Para Hoje" para "Recorrente", marcar o dia atual
+                        const localDate = this.getLocalDate();
+                        const currentWeekday = localDate.getDay();
+                        
+                        // Marcar apenas o dia atual
+                        for (let i = 0; i < 7; i++) {
+                            const checkbox = document.getElementById(`edit-weekday-${i}`);
+                            if (checkbox) {
+                                checkbox.checked = (i === currentWeekday);
+                            }
+                        }
+                    }
+                });
             }
             
             document.getElementById('edit-task-modal').classList.add('active');
@@ -1141,51 +1366,145 @@ class DailyTodoApp {
     // Salvamento da edição da tarefa
     saveTaskEdit() {
         const taskId = this.currentTaskId;
-        const task = this.recurringTasks.find(t => t.id === taskId);
+        let task = this.recurringTasks.find(t => t.id === taskId);
+        let isTodayOnly = false;
+        
+        // Se não encontrou nas tarefas recorrentes, procurar nas tarefas de hoje
+        if (!task && this.dailyTasks[this.currentDate]) {
+            task = this.dailyTasks[this.currentDate].find(t => t.id === taskId);
+            isTodayOnly = task && task.isTodayOnly;
+        }
         
         if (task) {
             // Obter título e descrição
             const title = document.getElementById('edit-task-title').value.trim();
             const description = document.getElementById('edit-task-description').value.trim();
+            const editTaskTypeToggle = document.getElementById('edit-task-type-toggle');
             
             if (!title) {
                 alert('Por favor, insira um título para a tarefa.');
                 return;
             }
             
-            // Obter dias da semana selecionados
-            const selectedWeekdays = [];
-            for (let i = 0; i < 7; i++) {
-                const checkbox = document.getElementById(`edit-weekday-${i}`);
-                if (checkbox && checkbox.checked) {
-                    selectedWeekdays.push(i);
+            if (editTaskTypeToggle.checked) {
+                // Converter para ou manter como tarefa recorrente
+                const selectedWeekdays = [];
+                for (let i = 0; i < 7; i++) {
+                    const checkbox = document.getElementById(`edit-weekday-${i}`);
+                    if (checkbox && checkbox.checked) {
+                        selectedWeekdays.push(i);
+                    }
+                }
+
+                if (selectedWeekdays.length === 0) {
+                    alert('Por favor, selecione pelo menos um dia da semana.');
+                    return;
+                }
+                
+                if (isTodayOnly) {
+                    // Converter de "Para Hoje" para "Recorrente"
+                    // Remover das tarefas de hoje
+                    this.dailyTasks[this.currentDate] = this.dailyTasks[this.currentDate].filter(t => t.id !== taskId);
+                    
+                    // Adicionar às tarefas recorrentes
+                    const recurringTask = {
+                        id: taskId,
+                        title: title,
+                        description: description,
+                        weekdays: selectedWeekdays,
+                        createdAt: task.createdAt
+                    };
+                    this.recurringTasks.push(recurringTask);
+                    
+                    this.saveData();
+                    this.hideEditTaskModal();
+                    this.hideTaskDetailsModal();
+                    this.renderRecurringTasks();
+                    this.generateTodayTasks();
+                    this.renderTodayTasks();
+                    this.updateTodayStats();
+                    
+                    this.showNotification('Tarefa convertida para "Recorrente" com sucesso!', 'success');
+                } else {
+                    // Atualizar tarefa recorrente existente
+                    task.title = title;
+                    task.description = description;
+                    task.weekdays = selectedWeekdays;
+                    
+                    this.saveData();
+                    this.updateHistory();
+                    this.hideEditTaskModal();
+                    this.hideTaskDetailsModal();
+                    this.renderRecurringTasks();
+                    this.generateTodayTasks();
+                    this.renderTodayTasks();
+                    this.renderStats();
+                    this.updateTodayStats();
+                    
+                    this.showNotification('Tarefa recorrente atualizada com sucesso!', 'success');
+                }
+            } else {
+                // Manter como ou converter para tarefa para hoje
+                if (isTodayOnly) {
+                    // Atualizar tarefa para hoje existente
+                    task.title = title;
+                    task.description = description;
+                    
+                    this.saveData();
+                    this.updateHistory();
+                    this.hideEditTaskModal();
+                    this.hideTaskDetailsModal();
+                    this.renderRecurringTasks();
+                    this.renderTodayTasks();
+                    this.renderStats();
+                    this.updateTodayStats();
+                    
+                    this.showNotification('Tarefa para hoje atualizada com sucesso!', 'success');
+                } else {
+                    // Converter de "Recorrente" para "Para Hoje"
+                    // Remover da lista de tarefas recorrentes
+                    this.recurringTasks = this.recurringTasks.filter(t => t.id !== taskId);
+                    
+                    // Verificar se já existe uma tarefa para hoje com este ID
+                    if (!this.dailyTasks[this.currentDate]) {
+                        this.dailyTasks[this.currentDate] = [];
+                    }
+                    
+                    // Remover qualquer tarefa existente com o mesmo ID para evitar duplicação
+                    this.dailyTasks[this.currentDate] = this.dailyTasks[this.currentDate].filter(t => t.id !== taskId);
+                    
+                    // Remover também qualquer tarefa que tenha o mesmo recurringTaskId
+                    this.dailyTasks[this.currentDate] = this.dailyTasks[this.currentDate].filter(t => t.recurringTaskId !== taskId);
+                    
+                    // Adicionar como tarefa para hoje
+                    const todayTask = {
+                        id: taskId,
+                        title: title,
+                        description: description,
+                        completed: false,
+                        createdAt: task.createdAt,
+                        isTodayOnly: true
+                    };
+                    
+                    this.dailyTasks[this.currentDate].push(todayTask);
+                    
+                    this.saveData();
+                    this.updateHistory();
+                    this.hideEditTaskModal();
+                    this.hideTaskDetailsModal();
+                    
+                    // Regenerar tarefas de hoje para garantir consistência
+                    this.generateTodayTasks();
+                    
+                    // Renderizar na ordem correta para evitar duplicações
+                    this.renderTodayTasks();
+                    this.renderRecurringTasks();
+                    this.renderStats();
+                    this.updateTodayStats();
+                    
+                    this.showNotification('Tarefa convertida para "Para Hoje" com sucesso!', 'success');
                 }
             }
-
-            if (selectedWeekdays.length === 0) {
-                alert('Por favor, selecione pelo menos um dia da semana.');
-                return;
-            }
-            
-            // Atualizar a tarefa
-            task.title = title;
-            task.description = description;
-            task.weekdays = selectedWeekdays;
-            
-            this.saveData();
-            this.hideEditTaskModal();
-            this.hideTaskDetailsModal();
-            this.renderRecurringTasks();
-            this.generateTodayTasks();
-            this.renderTodayTasks();
-            this.updateTodayStats();
-            
-            // Update insights if on analytics tab
-            if (this.currentTab === 'analytics') {
-                this.renderInsights();
-            }
-            
-            this.showNotification('Tarefa atualizada com sucesso!', 'success');
         }
     }
 
@@ -1358,14 +1677,83 @@ class DailyTodoApp {
     // Renderização das estatísticas
     renderStats() {
         const stats = this.calculateStats(this.getLast7Days());
-        
         document.getElementById('avg-completion').textContent = `${stats.avgCompletion}%`;
         document.getElementById('streak-days').textContent = stats.streakDays;
         document.getElementById('total-tasks').textContent = stats.totalTasks;
-        
         // Update best day
         const bestDay = this.calculateBestDay();
         document.getElementById('best-day').textContent = bestDay;
+
+        // --- NOVO: preencher trends dinâmicos ---
+        // 1. Trend de conclusão (% a mais ou a menos em relação à semana anterior)
+        const last7 = this.getLast7Days();
+        const prev7 = this.getLastNDays(14).slice(0, 7);
+        const avgLast7 = this.calculateStats(last7).avgCompletion;
+        const avgPrev7 = this.calculateStats(prev7).avgCompletion;
+        let trendCompletion = 0;
+        if (avgPrev7 > 0) {
+            trendCompletion = avgLast7 - avgPrev7;
+        }
+        let trendCompletionText = '';
+        if (trendCompletion > 0) {
+            trendCompletionText = `+${trendCompletion}% esta semana`;
+        } else if (trendCompletion < 0) {
+            trendCompletionText = `${trendCompletion}% esta semana`;
+        } else {
+            trendCompletionText = 'Estável';
+        }
+        const elTrendCompletion = document.getElementById('trend-completion');
+        if (elTrendCompletion) elTrendCompletion.textContent = trendCompletionText;
+
+        // 2. Trend de streak (maior streak dos últimos 14 dias)
+        const streakLast7 = this.calculateStats(last7).streakDays;
+        const streakPrev7 = this.calculateStats(prev7).streakDays;
+        let trendStreakText = '';
+        if (streakLast7 > streakPrev7) {
+            trendStreakText = `+${streakLast7 - streakPrev7} dias`;
+        } else if (streakLast7 < streakPrev7) {
+            trendStreakText = `${streakLast7 - streakPrev7} dias`;
+        } else {
+            trendStreakText = 'Estável';
+        }
+        const elTrendStreak = document.getElementById('trend-streak');
+        if (elTrendStreak) elTrendStreak.textContent = trendStreakText;
+
+        // 3. Trend de total de tarefas (quantas tarefas a mais esta semana)
+        const totalLast7 = this.calculateStats(last7).totalTasks;
+        const totalPrev7 = this.calculateStats(prev7).totalTasks;
+        let trendTotalText = '';
+        if (totalPrev7 > 0) {
+            const diff = totalLast7 - totalPrev7;
+            if (diff > 0) trendTotalText = `+${diff} esta semana`;
+            else if (diff < 0) trendTotalText = `${diff} esta semana`;
+            else trendTotalText = 'Estável';
+        } else {
+            trendTotalText = `${totalLast7} esta semana`;
+        }
+        const elTrendTotal = document.getElementById('trend-total');
+        if (elTrendTotal) elTrendTotal.textContent = trendTotalText;
+
+        // 4. Trend do melhor dia (média de conclusão do melhor dia)
+        // Vamos pegar o melhor dia e calcular a média de conclusão dele nos últimos 7 dias
+        const weekdayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+        let bestDayIndex = weekdayNames.indexOf(bestDay);
+        if (bestDayIndex === -1) bestDayIndex = 0;
+        let bestDaySum = 0;
+        let bestDayCount = 0;
+        last7.forEach(date => {
+            const d = new Date(date);
+            if (d.getDay() === bestDayIndex) {
+                const dayData = this.history[date];
+                if (dayData && dayData.total > 0) {
+                    bestDaySum += dayData.percentage;
+                    bestDayCount++;
+                }
+            }
+        });
+        const bestDayAvg = bestDayCount > 0 ? Math.round(bestDaySum / bestDayCount) : 0;
+        const elTrendBestDay = document.getElementById('trend-bestday');
+        if (elTrendBestDay) elTrendBestDay.textContent = bestDayAvg > 0 ? `${bestDayAvg}% de conclusão` : 'Sem dados';
     }
 
     // Cálculo das estatísticas
