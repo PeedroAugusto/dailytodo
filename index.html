@@ -31,15 +31,20 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
-        window.OneSignalDeferred = window.OneSignalDeferred || [];
-        OneSignalDeferred.push(async function (OneSignal) {
-            await OneSignal.init({
-                appId: "9d37703d-9e8e-479e-91dd-1cda7bcd6f31",
-            });
-        });
-    </script>
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+              .then(reg => {
+                console.log('Service Worker registrado com sucesso:', reg);
+              })
+              .catch(err => {
+                console.log('Erro ao registrar o Service Worker:', err);
+              });
+          });
+        }
+      </script>
+      
 </head>
 
 <body>
