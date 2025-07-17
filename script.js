@@ -626,6 +626,18 @@ class DailyTodoApp {
         const localDate = this.getLocalDate();
         const currentWeekday = localDate.getDay();
         
+        // Remover tarefas órfãs (tarefas de hoje que não têm mais uma tarefa recorrente correspondente)
+        this.dailyTasks[this.currentDate] = this.dailyTasks[this.currentDate].filter(task => {
+            // Se a tarefa tem recurringTaskId, verificar se a tarefa recorrente ainda existe
+            if (task.recurringTaskId) {
+                const recurringTaskExists = this.recurringTasks.find(rt => rt.id === task.recurringTaskId);
+                if (!recurringTaskExists) {
+                    return false; // Remove a tarefa órfã
+                }
+            }
+            return true; // Mantém a tarefa
+        });
+        
         // Adicionar tarefas recorrentes que ainda não existem para hoje
         const existingRecurringIds = this.dailyTasks[this.currentDate].map(task => task.recurringTaskId);
         
@@ -663,6 +675,18 @@ class DailyTodoApp {
         // Obter o dia da semana atual (0=domingo, 1=segunda, etc.)
         const localDate = this.getLocalDate();
         const currentWeekday = localDate.getDay();
+        
+        // Remover tarefas órfãs (tarefas de hoje que não têm mais uma tarefa recorrente correspondente)
+        this.dailyTasks[this.currentDate] = this.dailyTasks[this.currentDate].filter(task => {
+            // Se a tarefa tem recurringTaskId, verificar se a tarefa recorrente ainda existe
+            if (task.recurringTaskId) {
+                const recurringTaskExists = this.recurringTasks.find(rt => rt.id === task.recurringTaskId);
+                if (!recurringTaskExists) {
+                    return false; // Remove a tarefa órfã
+                }
+            }
+            return true; // Mantém a tarefa
+        });
         
         // Adicionar tarefas recorrentes que ainda não existem para hoje
         const existingRecurringIds = this.dailyTasks[this.currentDate].map(task => task.recurringTaskId);
@@ -954,11 +978,18 @@ class DailyTodoApp {
     // Exclusão de tarefa recorrente
     deleteRecurringTask(taskId) {
         if (confirm('Tem certeza que deseja excluir esta tarefa recorrente? Isso também removerá todas as instâncias futuras.')) {
+            // Remove from recurring tasks
             this.recurringTasks = this.recurringTasks.filter(task => task.id !== taskId);
+            
+            // Remove from today's tasks if it exists there
+            if (this.dailyTasks[this.currentDate]) {
+                this.dailyTasks[this.currentDate] = this.dailyTasks[this.currentDate].filter(task => task.id !== taskId);
+            }
+            
             this.saveData();
             this.renderRecurringTasks();
             
-            // Regenerate today's tasks
+            // Regenerate today's tasks to ensure consistency
             this.generateTodayTasks();
             this.updateTodayProgress();
             this.updateHistory();
@@ -1057,19 +1088,16 @@ class DailyTodoApp {
 
             document.getElementById('task-details-content').innerHTML = detailsContent;
             
-            // Show edit and toggle buttons only for recurring tasks
+            // Show edit and delete buttons only for recurring tasks
             const editBtn = document.getElementById('edit-task-btn');
-            const toggleBtn = document.getElementById('toggle-task-btn');
-            const toggleText = document.getElementById('toggle-task-text');
+            const deleteBtn = document.getElementById('delete-task-btn');
             
             if (editBtn) {
                 editBtn.style.display = type === 'recurring' ? 'inline-flex' : 'none';
             }
             
-            if (toggleBtn && toggleText) {
-                toggleBtn.style.display = type === 'recurring' ? 'inline-flex' : 'none';
-                toggleText.textContent = 'Ativar'; // Changed from toggleText to toggleText
-                toggleBtn.innerHTML = `<i class="fas fa-toggle-on"></i> <span id="toggle-task-text">Ativar</span>`;
+            if (deleteBtn) {
+                deleteBtn.style.display = type === 'recurring' ? 'inline-flex' : 'none';
             }
 
             document.getElementById('task-details-modal').classList.add('active');
