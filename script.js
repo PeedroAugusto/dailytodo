@@ -2208,15 +2208,35 @@ class DailyTodoApp {
 // Inicialização do aplicativo
 
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/service-worker.js')
-        .then(reg => {
-          console.log('[SW] Registrado com sucesso');
-          reg.update(); // força update da versão nova
-        })
-        .catch(err => {
-          console.log('[SW] Falha ao registrar', err);
-        });
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      // Verifica se há uma nova versão
+      reg.onupdatefound = () => {
+        const newWorker = reg.installing;
+        newWorker.onstatechange = () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            // Alerta visual simples
+            const updateBanner = document.createElement('div');
+            updateBanner.innerHTML = `
+              <div style="position:fixed;bottom:0;left:0;right:0;background:#222;color:white;padding:12px;text-align:center;z-index:9999;">
+                Nova versão disponível. <button id="refreshApp" style="margin-left:8px;padding:6px 12px;">Atualizar</button>
+              </div>
+            `;
+            document.body.appendChild(updateBanner);
+            document.getElementById('refreshApp').addEventListener('click', () => {
+              newWorker.postMessage({ action: 'skipWaiting' });
+            });
+          }
+        };
+      };
+    });
+  
+    // Força a ativação imediata do novo SW
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        window.location.reload();
+        refreshing = true;
+      }
     });
   }
   
