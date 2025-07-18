@@ -1,14 +1,3 @@
-function clearSW() {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(regs => {
-        for (const reg of regs) reg.unregister(); // ⛔ Remove o service worker
-        caches.keys().then(keys => keys.forEach(k => caches.delete(k))); // 🧹 Limpa TODOS os caches armazenados
-        alert("Atualizado! Recarregue a página."); // 💬 Mensagem pro usuário
-        location.reload(); // 🔄 Recarrega a página (forçado)
-      });
-    }
-  }
-
 // Classe principal do aplicativo
 class DailyTodoApp {
     constructor() {
@@ -66,22 +55,6 @@ class DailyTodoApp {
             });
         }
 
-        // Sync tasks button
-        const syncBtn = document.getElementById('sync-tasks-btn');
-        if (syncBtn) {
-            syncBtn.addEventListener('click', () => {
-                this.syncTodayTasks();
-                this.renderTodayTasks();
-                this.updateTodayStats();
-                
-                // Update insights if on analytics tab
-                if (this.currentTab === 'analytics') {
-                    this.renderInsights();
-                }
-                
-                this.showNotification('Tarefas sincronizadas com sucesso!', 'success');
-            });
-        }
 
         // Theme toggle button
         const themeToggle = document.getElementById('theme-toggle');
