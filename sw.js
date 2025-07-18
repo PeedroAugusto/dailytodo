@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v1.0.7'; // Altere sempre que fizer deploy!
+const CACHE_VERSION = 'v1.0.8'; // Altere sempre que fizer deploy!
 const CACHE_NAME = `daily-todo-${CACHE_VERSION}`;
 
 const urlsToCache = [
@@ -45,16 +45,19 @@ self.addEventListener('message', event => {
 });
 
 self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request).then(response => {
-      return response || fetch(event.request).catch(() => {
-        // Fallback para offline, se quiser
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
-        }
-      });
-    })
-  );
+  if (event.request.mode === 'navigate') {
+    // Para navegação, tenta rede primeiro e fallback para cache
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match('/index.html'))
+    );
+  } else {
+    // Para demais arquivos, tenta cache e fallback para rede
+    event.respondWith(
+      caches.match(event.request).then(response => {
+        return response || fetch(event.request);
+      })
+    );
+  }
 });
 
 

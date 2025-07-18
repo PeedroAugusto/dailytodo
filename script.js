@@ -4,7 +4,7 @@ function clearSW() {
         for (const reg of regs) reg.unregister(); // ⛔ Remove o service worker
         caches.keys().then(keys => keys.forEach(k => caches.delete(k))); // 🧹 Limpa TODOS os caches armazenados
         alert("Atualizado! Recarregue a página."); // 💬 Mensagem pro usuário
-        location.reload(true); // 🔄 Recarrega a página (forçado)
+        location.reload(); // 🔄 Recarrega a página (forçado)
       });
     }
   }
