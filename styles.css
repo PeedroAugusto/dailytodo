@@ -28,8 +28,8 @@
     --success-dark: #059669;
     --danger-color: #ef4444;
     --warning-color: #f59e0b;
-    --text-primary: #1f2937;
-    --text-secondary: #6b7280;
+    --text-primary: #000000;
+    --text-secondary: #242424;
     --text-muted: #9ca3af;
     --bg-primary: #ffffff;
     --bg-secondary: #f9fafb;
@@ -1963,11 +1963,11 @@ body.modal-open {
 }
 
 .toggle-switch input:checked ~ .toggle-label-left {
-    color: white;
+    color: var(--text-primary);
 }
 
 .toggle-switch input:not(:checked) ~ .toggle-label-right {
-    color: white;
+    color: var(--text-primary);
 }
 
 /* Hover effects */
@@ -2158,4 +2158,209 @@ body.modal-open {
 [data-theme="dark"] .task-status.inactive {
     background: rgba(156, 163, 175, 0.1);
     color: var(--text-muted);
+} 
+
+/* Notas */
+.notes-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+.notes-header h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+.notes-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    min-height: 120px;
+}
+.note-item {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: 1.1rem 1.2rem 0.8rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    position: relative;
+    animation: fadeIn 0.4s;
+}
+.note-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.note-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+.note-actions {
+    display: flex;
+    gap: 0.3rem;
+}
+.edit-note-btn {
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    min-height: 32px;
+}
+.edit-note-btn:hover {
+    background: var(--primary-color);
+    color: #fff;
+}
+.edit-note-btn i {
+    pointer-events: none;
+}
+.note-content {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    white-space: pre-line;
+    word-break: break-word;
+}
+.note-meta {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-align: right;
+}
+.delete-note-btn {
+    background: none;
+    border: none;
+    color: var(--danger-color);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    min-height: 32px;
+}
+.delete-note-btn:hover {
+    background: var(--danger-color);
+    color: #fff;
+}
+.delete-note-btn i {
+    pointer-events: none;
+}
+/* Responsivo para notas */
+@media (max-width: 600px) {
+    .notes-header h2 {
+        font-size: 1.1rem;
+    }
+    .note-item {
+        padding: 0.8rem 0.7rem 0.6rem 0.7rem;
+    }
+    .note-title {
+        font-size: 1rem;
+    }
+    .note-content {
+        font-size: 0.95rem;
+    }
+} 
+
+/* Estilos para tendências */
+.trend-excellent {
+    color: #059669 !important;
+    font-weight: 600;
+}
+.trend-good {
+    color: #10b981 !important;
+    font-weight: 500;
+}
+.trend-stable {
+    color: #6366f1 !important;
+    font-weight: 500;
+}
+.trend-warning {
+    color: #f59e0b !important;
+    font-weight: 500;
+}
+.trend-danger {
+    color: #ef4444 !important;
+    font-weight: 600;
+}
+.trend-neutral {
+    color: var(--text-muted) !important;
+    font-weight: 400;
+}
+
+[data-theme="dark"] .trend-excellent {
+    color: #34d399 !important;
+}
+[data-theme="dark"] .trend-good {
+    color: #10b981 !important;
+}
+[data-theme="dark"] .trend-stable {
+    color: #818cf8 !important;
+}
+[data-theme="dark"] .trend-warning {
+    color: #fbbf24 !important;
+}
+[data-theme="dark"] .trend-danger {
+    color: #f87171 !important;
+}
+[data-theme="dark"] .trend-neutral {
+    color: var(--text-muted) !important;
+} 
+
+/* Feedback visual do swipe */
+.swipe-feedback {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--primary-color);
+    color: white;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    z-index: 9999;
+    opacity: 0;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow-lg);
+}
+.swipe-feedback.swipe-left {
+    right: 20px;
+}
+.swipe-feedback.swipe-right {
+    left: 20px;
+}
+.swipe-feedback.show {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+}
+.swipe-feedback:not(.show) {
+    transform: translateY(-50%) scale(0.8);
+}
+
+/* Melhorar experiência de swipe no mobile */
+@media (max-width: 768px) {
+    .main-content {
+        touch-action: pan-y; /* Permitir scroll vertical, mas detectar swipe horizontal */
+    }
+    .tab-content {
+        user-select: none; /* Prevenir seleção de texto durante swipe */
+    }
 } 

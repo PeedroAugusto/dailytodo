@@ -28,7 +28,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=1.0.9">
+    <link rel="stylesheet" href="styles.css?v=1.0.10">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
 
@@ -74,6 +74,10 @@
                 <button class="tab-btn" data-tab="history">
                     <i class="fas fa-history"></i>
                     <span>Histórico</span>
+                </button>
+                <button class="tab-btn" data-tab="notes">
+                    <i class="fas fa-sticky-note"></i>
+                    <span>Notas</span>
                 </button>
             </div>
         </nav>
@@ -267,6 +271,22 @@
 
                 <div class="history-timeline" id="history-container">
                     <!-- History will be loaded here -->
+                </div>
+            </div>
+            <!-- Notes Tab -->
+            <div class="tab-content" id="notes-tab">
+                <div class="notes-header">
+                    <h2>Minhas Notas</h2>
+                    <button class="btn btn-primary" id="add-note-btn">
+                        <i class="fas fa-plus"></i> Nova Nota
+                    </button>
+                </div>
+                <div class="notes-container" id="notes-container">
+                    <!-- Notas serão exibidas aqui -->
+                </div>
+                <div class="empty-state" id="notes-empty" style="display: none;">
+                    <i class="fas fa-sticky-note"></i>
+                    <p>Nenhuma nota criada ainda. Clique em "Nova Nota" para adicionar!</p>
                 </div>
             </div>
         </main>
@@ -466,7 +486,71 @@
         </div>
     </div>
 
-    <script src="script.js?v=1.0.9"></script>
+    <!-- Add Note Modal -->
+    <div class="modal" id="add-note-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-sticky-note"></i> Nova Nota</h3>
+                <button class="close-btn" id="close-note-modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="add-note-form">
+                    <div class="form-group">
+                        <label for="note-title"><i class="fas fa-tag"></i> Título</label>
+                        <input type="text" id="note-title" required placeholder="Título da nota">
+                    </div>
+                    <div class="form-group">
+                        <label for="note-content"><i class="fas fa-align-left"></i> Conteúdo</label>
+                        <textarea id="note-content" required placeholder="Escreva sua nota..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-add-note">
+                            <i class="fas fa-times"></i> Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Adicionar Nota
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Note Modal -->
+    <div class="modal" id="edit-note-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-edit"></i> Editar Nota</h3>
+                <button class="close-btn" id="close-edit-note-modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-note-form">
+                    <div class="form-group">
+                        <label for="edit-note-title"><i class="fas fa-tag"></i> Título</label>
+                        <input type="text" id="edit-note-title" required placeholder="Título da nota">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-note-content"><i class="fas fa-align-left"></i> Conteúdo</label>
+                        <textarea id="edit-note-content" required placeholder="Escreva sua nota..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-edit-note">
+                            <i class="fas fa-times"></i> Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Salvar Alterações
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js?v=1.0.10"></script>
 
     <!-- PWA Service Worker Registration -->
     <script>
