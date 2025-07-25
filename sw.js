@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v1.0.10'; // Altere sempre que fizer deploy!
+const CACHE_VERSION = 'v1.0.11'; // Altere sempre que fizer deploy!
 const CACHE_NAME = `daily-todo-${CACHE_VERSION}`;
 
 const urlsToCache = [

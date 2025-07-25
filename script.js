@@ -1746,20 +1746,17 @@ class DailyTodoApp {
         this.updateCurrentDate();
         const container = document.getElementById('history-container');
         const last7Days = this.getLast7Days();
-        
         let filteredDays = last7Days;
         if (filter === '30days') {
             filteredDays = this.getLastNDays(30);
         } else if (filter === '90days') {
             filteredDays = this.getLastNDays(90);
         }
-
         // Filter out days with no tasks
         const daysWithTasks = filteredDays.filter(date => {
             const dayTasks = this.dailyTasks[date] || [];
             return dayTasks.length > 0;
         });
-
         if (daysWithTasks.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -1769,13 +1766,11 @@ class DailyTodoApp {
             `;
             return;
         }
-
         const historyHTML = daysWithTasks.map(date => {
             const dayTasks = this.dailyTasks[date] || [];
             const completedTasks = dayTasks.filter(task => task.completed).length;
             const totalTasks = dayTasks.length;
             const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
             // Get progress color based on percentage
             let progressColor = 'var(--text-secondary)';
             let progressClass = '';
@@ -1789,7 +1784,6 @@ class DailyTodoApp {
                 progressColor = 'var(--danger-color)';
                 progressClass = 'danger';
             }
-
             return `
                 <div class="history-day">
                     <div class="history-date">
@@ -1801,16 +1795,17 @@ class DailyTodoApp {
                     </div>
                     <div class="history-tasks">
                         ${dayTasks.map(task => `
-                            <div class="history-task ${task.completed ? 'completed' : ''}">
-                                <i class="fas fa-${task.completed ? 'check' : 'circle'}"></i>
-                                ${task.title}
+                            <div class="history-task ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" data-task-date="${date}">
+                                <span class="history-task-checkbox" onclick="app.toggleTaskCompletionForDate('${task.id}', '${date}')">
+                                    <i class="fas fa-${task.completed ? 'check-square' : 'square'}"></i>
+                                </span>
+                                <span class="history-task-title">${task.title}</span>
                             </div>
                         `).join('')}
                     </div>
                 </div>
             `;
         }).join('');
-
         container.innerHTML = historyHTML;
     }
 
@@ -1967,60 +1962,60 @@ class DailyTodoApp {
         }
         
         // TEMPORÁRIO: Criar dados de teste se não houver dados suficientes
-        if (Object.keys(this.history).length < 5) {
-            this.createTestData();
-            // Recalcular após criar dados de teste
-            const newAvgLast7 = this.calculateStats(last7).avgCompletion;
-            const newAvgPrev7 = this.calculateStats(prev7).avgCompletion;
+        // if (Object.keys(this.history).length < 5) {
+        //     this.createTestData();
+        //     // Recalcular após criar dados de teste
+        //     const newAvgLast7 = this.calculateStats(last7).avgCompletion;
+        //     const newAvgPrev7 = this.calculateStats(prev7).avgCompletion;
             
-            if (newAvgPrev7 > 0) {
-                const newTrendCompletion = newAvgLast7 - newAvgPrev7;
+        //     if (newAvgPrev7 > 0) {
+        //         const newTrendCompletion = newAvgLast7 - newAvgPrev7;
                 
-                // Se a média atual é alta (70%+), considerar como boa performance mesmo com pequenas variações
-                if (newAvgLast7 >= 70) {
-                    if (newTrendCompletion >= 5) {
-                        trendCompletionText = 'Excelente!';
-                        trendCompletionClass = 'excellent';
-                    } else if (newTrendCompletion >= 0) {
-                        trendCompletionText = 'Muito Bom';
-                        trendCompletionClass = 'good';
-                    } else if (newTrendCompletion >= -3) {
-                        trendCompletionText = 'Bom';
-                        trendCompletionClass = 'good';
-                    } else {
-                        trendCompletionText = 'Leve Queda';
-                        trendCompletionClass = 'warning';
-                    }
-                } else {
-                    // Lógica original para médias mais baixas
-                    if (newTrendCompletion >= 20) {
-                        trendCompletionText = 'Excelente!';
-                        trendCompletionClass = 'excellent';
-                    } else if (newTrendCompletion >= 10) {
-                        trendCompletionText = 'Muito Bom';
-                        trendCompletionClass = 'good';
-                    } else if (newTrendCompletion >= 5) {
-                        trendCompletionText = 'Bom';
-                        trendCompletionClass = 'good';
-                    } else if (newTrendCompletion > 0) {
-                        trendCompletionText = 'Melhorou';
-                        trendCompletionClass = 'good';
-                    } else if (newTrendCompletion >= -1) {
-                        trendCompletionText = 'Estável';
-                        trendCompletionClass = 'stable';
-                    } else if (newTrendCompletion >= -8) {
-                        trendCompletionText = 'Leve Queda';
-                        trendCompletionClass = 'warning';
-                    } else if (newTrendCompletion >= -15) {
-                        trendCompletionText = 'Precisa Melhorar';
-                        trendCompletionClass = 'warning';
-                    } else {
-                        trendCompletionText = 'Atenção';
-                        trendCompletionClass = 'danger';
-                    }
-                }
-            }
-        }
+        //         // Se a média atual é alta (70%+), considerar como boa performance mesmo com pequenas variações
+        //         if (newAvgLast7 >= 70) {
+        //             if (newTrendCompletion >= 5) {
+        //                 trendCompletionText = 'Excelente!';
+        //                 trendCompletionClass = 'excellent';
+        //             } else if (newTrendCompletion >= 0) {
+        //                 trendCompletionText = 'Muito Bom';
+        //                 trendCompletionClass = 'good';
+        //             } else if (newTrendCompletion >= -3) {
+        //                 trendCompletionText = 'Bom';
+        //                 trendCompletionClass = 'good';
+        //             } else {
+        //                 trendCompletionText = 'Leve Queda';
+        //                 trendCompletionClass = 'warning';
+        //             }
+        //         } else {
+        //             // Lógica original para médias mais baixas
+        //             if (newTrendCompletion >= 20) {
+        //                 trendCompletionText = 'Excelente!';
+        //                 trendCompletionClass = 'excellent';
+        //             } else if (newTrendCompletion >= 10) {
+        //                 trendCompletionText = 'Muito Bom';
+        //                 trendCompletionClass = 'good';
+        //             } else if (newTrendCompletion >= 5) {
+        //                 trendCompletionText = 'Bom';
+        //                 trendCompletionClass = 'good';
+        //             } else if (newTrendCompletion > 0) {
+        //                 trendCompletionText = 'Melhorou';
+        //                 trendCompletionClass = 'good';
+        //             } else if (newTrendCompletion >= -1) {
+        //                 trendCompletionText = 'Estável';
+        //                 trendCompletionClass = 'stable';
+        //             } else if (newTrendCompletion >= -8) {
+        //                 trendCompletionText = 'Leve Queda';
+        //                 trendCompletionClass = 'warning';
+        //             } else if (newTrendCompletion >= -15) {
+        //                 trendCompletionText = 'Precisa Melhorar';
+        //                 trendCompletionClass = 'warning';
+        //             } else {
+        //                 trendCompletionText = 'Atenção';
+        //                 trendCompletionClass = 'danger';
+        //             }
+        //         }
+        //     }
+        // }
         
         const elTrendCompletion = document.getElementById('trend-completion');
         if (elTrendCompletion) {
@@ -2735,6 +2730,40 @@ class DailyTodoApp {
             this.renderNotes();
             this.hideEditNoteModal();
             this.showNotification('Nota atualizada com sucesso!', 'success');
+        }
+    }
+
+    // NOVO: Atualizar histórico de um dia específico
+    updateHistoryForDate(date) {
+        const tasks = this.dailyTasks[date] || [];
+        const completedTasks = tasks.filter(task => task.completed).length;
+        const totalTasks = tasks.length;
+        this.history[date] = {
+            total: totalTasks,
+            completed: completedTasks,
+            percentage: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+            tasks: tasks
+        };
+        this.saveData();
+    }
+
+    // NOVO: Alternar conclusão de tarefa para um dia específico (histórico)
+    toggleTaskCompletionForDate(taskId, date) {
+        const tasks = this.dailyTasks[date];
+        if (!tasks) return;
+        const task = tasks.find(t => t.id === taskId);
+        if (task) {
+            task.completed = !task.completed;
+            task.completedAt = task.completed ? this.getLocalDate().toISOString() : null;
+            this.saveData();
+            this.updateHistoryForDate(date); // Atualiza o histórico do dia correto
+            this.renderHistory();
+            this.renderStats();
+            if (this.currentTab === 'analytics') {
+                this.renderInsights();
+            }
+            const status = task.completed ? 'concluída' : 'desmarcada';
+            this.showNotification(`Tarefa ${status} com sucesso!`, 'success');
         }
     }
 }
